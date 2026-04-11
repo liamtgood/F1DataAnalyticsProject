@@ -32,6 +32,40 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown("""
+<style>
+/* ── Sidebar nav list ─────────────────────────────────────────── */
+[data-testid="stSidebar"] [data-testid="stRadio"] > div:first-child {
+    display: none;          /* hide widget label */
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {
+    gap: 2px;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    padding: 0.45rem 0.75rem;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.15s;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: rgba(255,255,255,0.07);
+}
+/* hide the radio circle dot */
+[data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-of-type {
+    display: none !important;
+}
+/* selected item */
+[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"] {
+    background: transparent;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] input:checked + div,
+[data-testid="stSidebar"] [data-testid="stRadio"] input:checked ~ div {
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Team colours (approximate 2024)
 TEAM_COLORS = {
     "Red Bull": "#3671C6",
@@ -50,8 +84,39 @@ TEAM_COLORS = {
 
 ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24}
 
-# 2024 race calendar (round → name). Rounds 1-2 excluded (no prior-race form data).
+# Country flag emoji for each 2024 round
+RACE_FLAGS_2024 = {
+    1:  "🇧🇭",  # Bahrain
+    2:  "🇸🇦",  # Saudi Arabia
+    3:  "🇦🇺",  # Australia
+    4:  "🇯🇵",  # Japan
+    5:  "🇨🇳",  # China
+    6:  "🇺🇸",  # Miami (USA)
+    7:  "🇮🇹",  # Emilia Romagna (Italy)
+    8:  "🇲🇨",  # Monaco
+    9:  "🇨🇦",  # Canada
+    10: "🇪🇸",  # Spain
+    11: "🇦🇹",  # Austria
+    12: "🇬🇧",  # Britain
+    13: "🇭🇺",  # Hungary
+    14: "🇧🇪",  # Belgium
+    15: "🇳🇱",  # Netherlands
+    16: "🇮🇹",  # Italy (Monza)
+    17: "🇦🇿",  # Azerbaijan
+    18: "🇸🇬",  # Singapore
+    19: "🇺🇸",  # United States (COTA)
+    20: "🇲🇽",  # Mexico
+    21: "🇧🇷",  # Brazil
+    22: "🇺🇸",  # Las Vegas (USA)
+    23: "🇶🇦",  # Qatar
+    24: "🇦🇪",  # Abu Dhabi
+}
+FLAGS_BY_YEAR = {2024: RACE_FLAGS_2024}
+
+# 2024 race calendar (round → name).
 RACE_CALENDAR_2024 = {
+    1:  "Bahrain GP",
+    2:  "Saudi Arabian GP",
     3:  "Australian GP",
     4:  "Japanese GP",
     5:  "Chinese GP",
@@ -77,9 +142,82 @@ RACE_CALENDAR_2024 = {
 }
 CALENDAR_BY_YEAR = {2024: RACE_CALENDAR_2024}
 
+# Official F1 CDN circuit map image filenames (from media.formula1.com).
+_F1_CDN_BASE = (
+    "https://media.formula1.com/image/upload/c_fit,h_704/q_auto/"
+    "content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/"
+)
+
+F1_CDN_FILENAMES_2024 = {
+    1:  "Bahrain_Circuit",
+    2:  "Saudi_Arabia_Circuit",
+    3:  "Australia_Circuit",
+    4:  "Japan_Circuit",
+    5:  "China_Circuit",
+    6:  "Miami_Circuit",
+    7:  "Emilia_Romagna_Circuit",
+    8:  "Monaco_Circuit",
+    9:  "Canada_Circuit",
+    10: "Spain_Circuit",
+    11: "Austria_Circuit",
+    12: "Great_Britain_Circuit",
+    13: "Hungary_Circuit",
+    14: "Belgium_Circuit",
+    15: "Netherlands_Circuit",
+    16: "Italy_Circuit",
+    17: "Baku_Circuit",
+    18: "Singapore_Circuit",
+    19: "USA_Circuit",
+    20: "Mexico_Circuit",
+    21: "Brazil_Circuit",
+    22: "Las_Vegas_Circuit",
+    23: "Qatar_Circuit",
+    24: "Abu_Dhabi_Circuit",
+}
+F1_CDN_FILENAMES_BY_YEAR = {2024: F1_CDN_FILENAMES_2024}
+
 # ---------------------------------------------------------------------------
 # Cached loaders
 # ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False, ttl=None)
+def get_track_image_path(year: int, round_number: int) -> str | None:
+    """
+    Returns path to a locally cached track layout image.
+    On first call fetches the circuit map from the official F1 CDN and saves
+    it to assets/tracks/{year}_{round}.webp.
+    Subsequent calls are instant (local file read).
+    """
+    import requests
+    out_dir = Path("assets/tracks")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{year}_{round_number}.webp"
+    if out_path.exists():
+        return str(out_path)
+    filename = F1_CDN_FILENAMES_BY_YEAR.get(year, {}).get(round_number)
+    if not filename:
+        return None
+    try:
+        url = f"{_F1_CDN_BASE}{filename}.webp"
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        out_path.write_bytes(resp.content)
+        return str(out_path)
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner="Loading practice data...", ttl=3600)
+def load_practice_data(year: int, round_number: int) -> pd.DataFrame:
+    """Load raw practice laps for all three sessions."""
+    setup_cache("cache")
+    from src.data_loader import load_practice_laps
+    return load_practice_laps(year, round_number)
+
 
 @st.cache_resource(show_spinner="Loading models...")
 def load_models():
@@ -105,11 +243,11 @@ def load_models():
 
 
 @st.cache_data(show_spinner="Running predictions...", ttl=3600)
-def run_prediction(year: int, round_number: int, use_actual_grid: bool):
-    """Cache predictions per (year, round) so switching tabs doesn't re-run."""
+def run_prediction(year: int, round_number: int, use_actual_grid: bool, mc_samples: int = 1):
+    """Cache predictions per (year, round, mc_samples) so switching tabs doesn't re-run."""
     setup_cache("cache")
     from src.pipeline import predict_race
-    return predict_race(year, round_number, use_actual_grid=use_actual_grid)
+    return predict_race(year, round_number, use_actual_grid=use_actual_grid, mc_samples=mc_samples)
 
 
 def run_whatif_prediction(year: int, round_number: int, overrides: dict, use_actual_grid: bool):
@@ -122,6 +260,203 @@ def run_whatif_prediction(year: int, round_number: int, overrides: dict, use_act
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _fmt_laptime(seconds: float) -> str:
+    """Convert float seconds to M:SS.mmm string."""
+    if pd.isna(seconds):
+        return "—"
+    m = int(seconds // 60)
+    s = seconds - m * 60
+    return f"{m}:{s:06.3f}"
+
+
+# ---------------------------------------------------------------------------
+# Timing-tower HTML rendering (F1 live-timing style)
+# ---------------------------------------------------------------------------
+
+_COMPOUND_STYLE = {
+    "SOFT":         ("#E8002D", "#fff", "S"),
+    "MEDIUM":       ("#FFF200", "#000", "M"),
+    "HARD":         ("#F0F0F0", "#000", "H"),
+    "INTERMEDIATE": ("#39B549", "#000", "I"),
+    "WET":          ("#0067FF", "#fff", "W"),
+}
+_TC = "padding:6px 10px;font-size:12px;"
+_TM = f"{_TC}font-family:monospace;"
+
+
+def _compound_badge_html(compound: str) -> str:
+    bg, fg, ltr = _COMPOUND_STYLE.get(str(compound).upper().strip(), ("#555", "#ccc", "?"))
+    return (
+        f'<span style="display:inline-flex;align-items:center;justify-content:center;'
+        f'width:22px;height:22px;border-radius:50%;background:{bg};color:{fg};'
+        f'font-weight:800;font-size:11px;">{ltr}</span>'
+    )
+
+
+def _sector_cell_html(value_s, col_min: float, col_max: float) -> str:
+    if pd.isna(value_s):
+        return f'<td style="{_TC}color:#555;">—</td>'
+    delta = float(value_s) - col_min
+    spread = max(col_max - col_min, 0.001)
+    bar_w = max(4, int((1.0 - delta / spread) * 50))
+    bar_c = "#00D2BE" if delta < 0.05 else ("#FFF200" if delta < 0.25 else "#E8002D")
+    txt_c = "#00D2BE" if delta < 0.05 else "#e0e0e0"
+    return (
+        f'<td style="{_TC}">'
+        f'<span style="font-family:monospace;color:{txt_c};">{float(value_s):.3f}</span>'
+        f'<div style="height:3px;width:{bar_w}px;background:{bar_c};'
+        f'border-radius:2px;margin-top:2px;"></div></td>'
+    )
+
+
+def _tt_pos_driver(idx: int, pos: int, driver: str, team: str) -> str:
+    tc = team_color(team)
+    bg = "#1e1e1e" if idx % 2 == 0 else "#242424"
+    p_bg = {1: "#FFD700", 2: "#C0C0C0", 3: "#CD7F32"}.get(pos, "#2e2e2e")
+    p_fg = "#000" if pos <= 3 else "#fff"
+    return (
+        f'<tr style="background:{bg};border-left:3px solid {tc};">'        
+        f'<td style="{_TC}text-align:center;width:44px;">'
+        f'<span style="background:{p_bg};color:{p_fg};font-weight:700;'
+        f'font-size:12px;padding:2px 7px;border-radius:4px;">{pos}</span></td>'
+        f'<td style="{_TC}white-space:nowrap;">'
+        f'<span style="color:#fff;font-weight:700;font-size:14px;letter-spacing:1px;">{driver}</span><br>'
+        f'<span style="color:#555;font-size:10px;">{team}</span></td>'
+    )
+
+
+def _tt_table(thead: str, tbody: str) -> str:
+    return (
+        '<div style="border-radius:8px;overflow:hidden;'
+        'font-family:Segoe UI,Arial,sans-serif;margin-bottom:12px;">'
+        '<table style="width:100%;border-collapse:collapse;">'
+        f'<thead><tr style="background:#0d0d0d;color:#555;font-size:10px;'
+        f'text-transform:uppercase;letter-spacing:1px;">{thead}</tr></thead>'
+        f'<tbody>{tbody}</tbody>'
+        '</table></div>'
+    )
+
+
+def _th(label: str, align: str = "left") -> str:
+    return f'<th style="padding:7px 10px;text-align:{align};font-weight:600;">{label}</th>'
+
+
+def practice_timing_html(sess_df: pd.DataFrame, team_map: dict) -> str:
+    df = sess_df.sort_values("best_lap_time_s").reset_index(drop=True)
+    pole_s = df["best_lap_time_s"].min()
+    s1_mn, s1_mx = df["s1_best_s"].min(), df["s1_best_s"].max()
+    s2_mn, s2_mx = df["s2_best_s"].min(), df["s2_best_s"].max()
+    s3_mn, s3_mx = df["s3_best_s"].min(), df["s3_best_s"].max()
+    thead = (
+        _th("Pos", "center") + _th("Driver") + _th("Tyre", "center")
+        + _th("Laps", "center") + _th("Best Lap") + _th("Gap")
+        + _th("S1") + _th("S2") + _th("S3") + _th("Speed Trap")
+    )
+    tbody = ""
+    for i, row in df.iterrows():
+        team = team_map.get(row["driver"], row.get("team", ""))
+        gap_s = row["best_lap_time_s"] - pole_s
+        g_str = "BEST" if gap_s < 0.001 else f"+{gap_s:.3f}"
+        g_c = "#00D2BE" if gap_s < 0.001 else "#e0e0e0"
+        spd = f'{row["speed_trap_max"]:.0f} km/h' if pd.notna(row.get("speed_trap_max")) else "—"
+        tbody += (
+            _tt_pos_driver(i, i + 1, row["driver"], team)
+            + f'<td style="{_TC}text-align:center;">{_compound_badge_html(row.get("compound", "?"))}</td>'
+            + f'<td style="{_TC}text-align:center;color:#aaa;">{int(row.get("num_laps", 0))}</td>'
+            + f'<td style="{_TM}color:#fff;white-space:nowrap;">{_fmt_laptime(row["best_lap_time_s"])}</td>'
+            + f'<td style="{_TM}color:{g_c};font-weight:600;">{g_str}</td>'
+            + _sector_cell_html(row.get("s1_best_s"), s1_mn, s1_mx)
+            + _sector_cell_html(row.get("s2_best_s"), s2_mn, s2_mx)
+            + _sector_cell_html(row.get("s3_best_s"), s3_mn, s3_mx)
+            + f'<td style="{_TC}color:#aaa;">{spd}</td></tr>'
+        )
+    return _tt_table(thead, tbody)
+
+
+def qualifying_timing_html(df: pd.DataFrame, lap_col) -> str:
+    df = df.sort_values("predicted_grid_pos").reset_index(drop=True)
+    has_lap = bool(lap_col and lap_col in df.columns)
+    has_gap = "proj_pole_gap_s" in df.columns
+    has_actual = "actual_grid_pos" in df.columns
+    thead = _th("P", "center") + _th("Driver")
+    if has_lap:
+        thead += _th("Lap Time")
+    if has_gap:
+        thead += _th("Gap to Pole")
+    if has_actual:
+        thead += _th("Actual P", "center")
+    tbody = ""
+    for i, row in df.iterrows():
+        pos = int(row["predicted_grid_pos"])
+        cells = _tt_pos_driver(i, pos, row["driver"], row.get("team", ""))
+        if has_lap:
+            v = row.get(lap_col)
+            cells += (
+                f'<td style="{_TM}color:#fff;white-space:nowrap;">{_fmt_laptime(float(v))}</td>'
+                if pd.notna(v) else f'<td style="{_TC}color:#555;">—</td>'
+            )
+        if has_gap:
+            g = row.get("proj_pole_gap_s")
+            if pd.notna(g):
+                g = float(g)
+                g_str = "POLE" if g == 0 else f"+{g:.3f}"
+                g_c = "#00D2BE" if g == 0 else "#e0e0e0"
+            else:
+                g_str, g_c = "—", "#555"
+            cells += f'<td style="{_TM}color:{g_c};font-weight:600;">{g_str}</td>'
+        if has_actual:
+            act = row.get("actual_grid_pos")
+            act_str = str(int(act)) if pd.notna(act) else "—"
+            if pd.notna(act):
+                diff = pos - int(act)
+                if diff != 0:
+                    arr = "▼" if diff > 0 else "▲"
+                    dc = "#E8002D" if diff > 0 else "#00D2BE"
+                    act_str += f' <span style="color:{dc};font-size:10px;">{arr}{abs(diff)}</span>'
+            cells += f'<td style="{_TC}text-align:center;color:#aaa;">{act_str}</td>'
+        tbody += cells + "</tr>"
+    return _tt_table(thead, tbody)
+
+
+def race_timing_html(df: pd.DataFrame) -> str:
+    df = df.sort_values("predicted_finish_pos").reset_index(drop=True)
+    has_grid = "grid_used" in df.columns
+    has_chg = "position_change" in df.columns
+    has_actual = "actual_finish_pos" in df.columns
+    thead = _th("Pos", "center") + _th("Driver")
+    if has_grid:
+        thead += _th("Grid", "center")
+    if has_chg:
+        thead += _th("\u0394 Pos", "center")
+    if has_actual:
+        thead += _th("Actual", "center")
+    tbody = ""
+    for i, row in df.iterrows():
+        pos = int(row["predicted_finish_pos"])
+        cells = _tt_pos_driver(i, pos, row["driver"], row.get("team", ""))
+        if has_grid:
+            gv = row.get("grid_used")
+            cells += f'<td style="{_TC}text-align:center;color:#aaa;">{int(gv) if pd.notna(gv) else "—"}</td>'
+        if has_chg:
+            chg = row.get("position_change")
+            if pd.notna(chg):
+                chg = float(chg)
+                if chg > 0:
+                    chg_html = f'<span style="color:#00D2BE;font-weight:700;">\u25b2{int(abs(chg))}</span>'
+                elif chg < 0:
+                    chg_html = f'<span style="color:#E8002D;font-weight:700;">\u25bc{int(abs(chg))}</span>'
+                else:
+                    chg_html = '<span style="color:#555;">—</span>'
+            else:
+                chg_html = '<span style="color:#555;">—</span>'
+            cells += f'<td style="{_TC}text-align:center;">{chg_html}</td>'
+        if has_actual:
+            act = row.get("actual_finish_pos")
+            cells += f'<td style="{_TC}text-align:center;color:#aaa;">{int(act) if pd.notna(act) else "—"}</td>'
+        tbody += cells + "</tr>"
+    return _tt_table(thead, tbody)
+
 
 def team_color(team_name: str) -> str:
     for k, v in TEAM_COLORS.items():
@@ -215,6 +550,50 @@ def shap_bar_chart(shap_values, feature_names: list, title: str):
     return fig
 
 
+def probability_chart(probs_df: pd.DataFrame, drivers_ordered: list, title: str):
+    """
+    Stacked horizontal bar chart showing each driver's probability of finishing
+    in positions P1, P2, P3, P4-6, P7-10, P11+.
+    Drivers ordered by predicted finishing position (best at top).
+    """
+    buckets = {
+        "P1":   ([1],          "#FFD700"),
+        "P2":   ([2],          "#C0C0C0"),
+        "P3":   ([3],          "#CD7F32"),
+        "P4-6": ([4, 5, 6],    "#4CAF50"),
+        "P7-10":([7, 8, 9, 10],"#2196F3"),
+        "P11+": (list(range(11, 21)), "#555555"),
+    }
+    plot_data = []
+    for driver in drivers_ordered:
+        if driver not in probs_df.index:
+            continue
+        row = probs_df.loc[driver]
+        for label, (positions, color) in buckets.items():
+            prob = sum(row.get(p, 0) for p in positions)
+            plot_data.append({"Driver": driver, "Bucket": label, "Probability": prob, "Color": color})
+
+    plot_df = pd.DataFrame(plot_data)
+    color_map = {label: color for label, (_, color) in buckets.items()}
+    fig = px.bar(
+        plot_df,
+        x="Probability", y="Driver", color="Bucket", orientation="h",
+        color_discrete_map=color_map,
+        title=title,
+        category_orders={"Driver": drivers_ordered,
+                         "Bucket": list(buckets.keys())},
+    )
+    fig.update_layout(
+        height=max(350, len(drivers_ordered) * 22),
+        xaxis=dict(tickformat=".0%", range=[0, 1]),
+        margin=dict(l=10, r=10, t=40, b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font_color="white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
 def grid_bar_chart(df: pd.DataFrame, pos_col: str, title: str):
     df = df.copy()
     df["color"] = df["team"].apply(team_color) if "team" in df.columns else "#888"
@@ -239,6 +618,8 @@ def grid_bar_chart(df: pd.DataFrame, pos_col: str, title: str):
 # Sidebar
 # ---------------------------------------------------------------------------
 
+_SECTIONS = ["📊 Qualifying", "🏁 Race Prediction", "🎯 Accuracy", "🔬 Practice Data", "🔧 What-If"]
+
 with st.sidebar:
     st.title("🏎️ F1 Race Predictor")
     st.markdown("Two-stage ML pipeline: **Practice → Quali → Race**")
@@ -252,13 +633,27 @@ with st.sidebar:
         "Race Weekend",
         options=range(len(race_options)),
         format_func=lambda i: race_labels[i],
-        index=3,  # default to R6 Miami
+        index=0,
     )
     round_number, race_name = race_options[selected_idx]
+
+    st.divider()
+    st.caption("VIEW")
+    _active_section = st.radio("View", _SECTIONS, label_visibility="collapsed")
+
+    st.divider()
     use_actual_grid = st.checkbox(
         "Use actual qualifying result",
         value=False,
         help="Skip Stage 1 and feed actual grid positions into the race model",
+    )
+
+    st.markdown("**Monte Carlo Samples**")
+    mc_samples = st.select_slider(
+        "Simulations",
+        options=[1, 50, 100, 200, 500],
+        value=100,
+        help="Add Gaussian noise to features and average over N runs. More samples → smoother probabilities, slower prediction.",
     )
 
     st.divider()
@@ -275,7 +670,16 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 
 race_label = CALENDAR_BY_YEAR.get(year, {}).get(round_number, f"Round {round_number}")
-st.title(f"F1 Prediction — {year} {race_label}")
+race_flag  = FLAGS_BY_YEAR.get(year, {}).get(round_number, "")
+_title_col, _map_col = st.columns([3, 1])
+with _title_col:
+    st.title(f"{race_flag}  F1 Prediction — {year} {race_label}")
+with _map_col:
+    _img_path = get_track_image_path(year, round_number)
+    if _img_path:
+        st.image(_img_path, use_container_width=True)
+    else:
+        st.caption("Track image unavailable")
 
 if not models_loaded:
     st.info("Train the models first using the instructions in the sidebar, then come back here.")
@@ -284,17 +688,15 @@ if not models_loaded:
 # ---- Run prediction ----
 with st.spinner("Running pipeline..."):
     try:
-        result = run_prediction(year, round_number, use_actual_grid)
+        result = run_prediction(year, round_number, use_actual_grid, mc_samples)
     except Exception as exc:
         st.error(f"Prediction failed: {exc}")
         st.stop()
 
-tab_quali, tab_race, tab_accuracy, tab_whatif = st.tabs(["📊 Qualifying", "🏁 Race Prediction", "🎯 Accuracy", "🔧 What-If"])
-
 # ===========================================================================
-# Tab 1 – Qualifying
+# Section 1 – Qualifying
 # ===========================================================================
-with tab_quali:
+if _active_section == "📊 Qualifying":
     st.subheader(f"Predicted Qualifying Order — {race_label}")
     qual_df = result["qualifying"]
 
@@ -306,31 +708,30 @@ with tab_quali:
         )
         show_metric_badges(qm)
 
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        display_cols = ["predicted_grid_pos", "driver"]
-        if "team" in qual_df.columns:
-            display_cols.append("team")
-        if "actual_grid_pos" in qual_df.columns:
-            display_cols.append("actual_grid_pos")
-        if "predicted_grid_delta" in qual_df.columns:
-            display_cols.append("predicted_grid_delta")
+    # ---- Projected pole time and gap to pole ----
+    # q_best_lap_s is the actual qualifying lap time (available for past races).
+    # For future races fall back to scaling FP3 times (~1.5% faster in qualifying).
+    qual_df = qual_df.copy()
+    if "q_best_lap_s" in qual_df.columns and qual_df["q_best_lap_s"].notna().any():
+        pole_time_s = qual_df["q_best_lap_s"].min()
+        qual_df["proj_pole_gap_s"] = (qual_df["q_best_lap_s"] - pole_time_s).round(3)
+        proj_pole_label = _fmt_laptime(pole_time_s)
+        lap_col = "q_best_lap_s"
+    elif "fp3_lap_delta_s" in qual_df.columns:
+        # Use FP3 deltas as a proxy; fastest driver projected as baseline
+        fp3_best_proxy = qual_df["fp3_lap_delta_s"].min()  # 0 for the quickest
+        qual_df["proj_pole_gap_s"] = (qual_df["fp3_lap_delta_s"] - fp3_best_proxy).round(3)
+        proj_pole_label = "(FP3-based estimate)"
+        lap_col = None
+    else:
+        proj_pole_label = None
+        lap_col = None
 
-        show_df = qual_df[display_cols].copy()
-        show_df.columns = (
-            ["P", "Driver"]
-            + (["Team"] if "team" in qual_df.columns else [])
-            + (["Actual P"] if "actual_grid_pos" in qual_df.columns else [])
-            + (["Δ to best (s)"] if "predicted_grid_delta" in qual_df.columns else [])
-        )
-        if "Δ to best (s)" in show_df.columns:
-            show_df["Δ to best (s)"] = show_df["Δ to best (s)"].round(3)
-        st.dataframe(show_df, use_container_width=True, hide_index=True)
+    if proj_pole_label:
+        label_prefix = "Actual pole lap" if lap_col else "Estimated pole lap (FP3-based)"
+        st.markdown(f"**{label_prefix}:** `{proj_pole_label}`")
 
-    with col2:
-        if "predicted_grid_delta" in qual_df.columns:
-            fig = grid_bar_chart(qual_df, "predicted_grid_pos", "Predicted Qualifying Positions")
-            st.plotly_chart(fig, use_container_width=True)
+    st.markdown(qualifying_timing_html(qual_df, lap_col), unsafe_allow_html=True)
 
     # SHAP
     st.subheader("Feature Importance (Qualifying Model)")
@@ -343,9 +744,9 @@ with tab_quali:
         st.info(f"SHAP unavailable: {e}")
 
 # ===========================================================================
-# Tab 2 – Race Prediction
+# Section 2 – Race Prediction
 # ===========================================================================
-with tab_race:
+elif _active_section == "🏁 Race Prediction":
     st.subheader(f"Predicted Race Finishing Order — {race_label}")
     race_df = result["race"]
 
@@ -357,36 +758,16 @@ with tab_race:
         )
         show_metric_badges(rm)
 
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        rcols = ["predicted_finish_pos", "driver"]
-        if "team" in race_df.columns:
-            rcols.append("team")
-        if "grid_used" in race_df.columns:
-            rcols.append("grid_used")
-        if "position_change" in race_df.columns:
-            rcols.append("position_change")
-        if "actual_finish_pos" in race_df.columns:
-            rcols.append("actual_finish_pos")
+    st.markdown(race_timing_html(race_df), unsafe_allow_html=True)
 
-        show_race = race_df[rcols].copy()
-        col_labels = (
-            ["Pos", "Driver"]
-            + (["Team"] if "team" in race_df.columns else [])
-            + (["Grid"] if "grid_used" in race_df.columns else [])
-            + (["Δ Pos"] if "position_change" in race_df.columns else [])
-            + (["Actual"] if "actual_finish_pos" in race_df.columns else [])
-        )
-        show_race.columns = col_labels
-        if "Δ Pos" in show_race.columns:
-            show_race["Δ Pos"] = show_race["Δ Pos"].apply(
-                lambda v: f"+{int(v)}" if float(v) > 0 else str(int(v))
-            )
-        st.dataframe(show_race, use_container_width=True, hide_index=True)
-
-    with col2:
-        fig2 = grid_bar_chart(race_df, "predicted_finish_pos", "Predicted Finishing Positions")
-        st.plotly_chart(fig2, use_container_width=True)
+    # Monte Carlo position probability chart
+    if result.get("race_probs") is not None:
+        st.subheader("Position Probability Distribution")
+        st.caption(f"Based on {mc_samples} Monte Carlo simulations with Gaussian feature noise.")
+        drivers_ordered = result["race"]["driver"].tolist()
+        fig_prob = probability_chart(result["race_probs"], drivers_ordered,
+                                     "Finishing Position Probabilities")
+        st.plotly_chart(fig_prob, use_container_width=True)
 
     # SHAP
     st.subheader("Feature Importance (Race Model)")
@@ -399,9 +780,9 @@ with tab_race:
         st.info(f"SHAP unavailable: {e}")
 
 # ===========================================================================
-# Tab 3 – Accuracy
+# Section 3 – Accuracy
 # ===========================================================================
-with tab_accuracy:
+elif _active_section == "🎯 Accuracy":
     st.subheader(f"Model Accuracy — {race_label}")
     st.markdown("Comparing model predictions against actual results for this race weekend.")
 
@@ -470,9 +851,45 @@ with tab_accuracy:
             st.dataframe(err_df, use_container_width=True, hide_index=True)
 
 # ===========================================================================
-# Tab 4 – What-If
+# Section 4 – Practice Data
 # ===========================================================================
-with tab_whatif:
+elif _active_section == "🔬 Practice Data":
+    st.subheader(f"Practice Session Data — {race_label}")
+
+    try:
+        raw_practice = load_practice_data(year, round_number)
+    except Exception as exc:
+        st.error(f"Could not load practice data: {exc}")
+        raw_practice = pd.DataFrame()
+
+    if raw_practice.empty:
+        st.info("No practice data available for this round.")
+    else:
+        # Team colour map for driver bars
+        quali_team_map = (
+            result["qualifying"].set_index("driver")["team"].to_dict()
+            if "team" in result["qualifying"].columns else {}
+        )
+
+        for session_id in ("FP1", "FP2", "FP3"):
+            sess_df = raw_practice[raw_practice["session"] == session_id].copy()
+            if sess_df.empty:
+                continue
+
+            st.markdown(f"### {session_id}")
+
+            sess_df = sess_df.sort_values("best_lap_time_s").reset_index(drop=True)
+            pole_s = sess_df["best_lap_time_s"].min()
+            sess_df["gap_to_best_s"] = (sess_df["best_lap_time_s"] - pole_s).round(3)
+            sess_df["team"] = sess_df["driver"].map(quali_team_map)
+
+            st.markdown(practice_timing_html(sess_df, quali_team_map), unsafe_allow_html=True)
+            st.divider()
+
+# ===========================================================================
+# Section 5 – What-If
+# ===========================================================================
+elif _active_section == "🔧 What-If":
     st.subheader("What-If Scenario Controls")
     st.markdown("Override inputs to the race model and see how predictions change.")
 

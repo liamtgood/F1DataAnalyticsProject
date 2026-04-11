@@ -103,7 +103,7 @@ def build_qualifying_features(year: int, round_number: int) -> pd.DataFrame:
     fp1_feat = _session_deltas(fp1, "fp1")
 
     # ---- Merge all sessions ----
-    feat = quali[["driver", "team", "grid_position"]].copy()
+    feat = quali[["driver", "team", "grid_position", "q_best_lap_s"]].copy()
     feat["team"] = feat["team"].apply(_normalize_team)
 
     for session_feat in (fp3_feat, fp2_feat, fp1_feat):
@@ -160,6 +160,24 @@ def build_qualifying_features(year: int, round_number: int) -> pd.DataFrame:
     feat["year"] = year
     feat["round"] = round_number
     feat["circuit_name"] = circuit["circuit_name"]
+
+    # ---- Rookie / new-driver defaults ----
+    # Drivers not in the previous season (rookies or those without history)
+    # get 0 points, last-place championship positions, and a last-place avg finish.
+    # This is applied BEFORE the generic median-fill so these columns get
+    # sensible values rather than the median of the existing grid.
+    n_drivers = len(feat)
+    rookie_defaults = {
+        "driver_points": 0.0,
+        "driver_championship_pos": float(n_drivers),
+        "constructor_points": 0.0,
+        "constructor_championship_pos": float(n_drivers // 2),
+        "avg_finish_last_n": 20.0,
+        "dnf_rate_last_n": 0.0,
+    }
+    for col, default in rookie_defaults.items():
+        if col in feat.columns:
+            feat[col] = feat[col].fillna(default)
 
     # ---- Fill NaN with sensible defaults ----
     numeric_cols = feat.select_dtypes(include=[np.number]).columns
@@ -278,6 +296,20 @@ def build_race_features(year: int, round_number: int,
     feat["year"] = year
     feat["round"] = round_number
     feat["circuit_name"] = circuit["circuit_name"]
+
+    # ---- Rookie / new-driver defaults ----
+    n_drivers = len(feat)
+    rookie_defaults = {
+        "driver_points": 0.0,
+        "driver_championship_pos": float(n_drivers),
+        "constructor_points": 0.0,
+        "constructor_championship_pos": float(n_drivers // 2),
+        "avg_finish_last_n": 20.0,
+        "dnf_rate_last_n": 0.0,
+    }
+    for col, default in rookie_defaults.items():
+        if col in feat.columns:
+            feat[col] = feat[col].fillna(default)
 
     # ---- Fill NaN ----
     numeric_cols = feat.select_dtypes(include=[np.number]).columns

@@ -209,15 +209,86 @@ def _ergast_get(endpoint: str, retries: int = 3) -> dict:
     return {}
 
 
+def _load_final_driver_standings(year: int) -> pd.DataFrame:
+    """Return final driver championship standings for a completed season."""
+    data = _ergast_get(f"{year}/last/driverStandings")
+    try:
+        standings_list = data["MRData"]["StandingsTable"]["StandingsLists"][0]["DriverStandings"]
+    except (KeyError, IndexError):
+        return pd.DataFrame()
+    rows = []
+    for entry in standings_list:
+        rows.append({
+            "driver": entry["Driver"]["code"],
+            "driver_points": float(entry["points"]),
+            "driver_wins": int(entry["wins"]),
+            "driver_championship_pos": int(entry["position"]),
+        })
+    return pd.DataFrame(rows)
+
+
+def _load_final_constructor_standings(year: int) -> pd.DataFrame:
+    """Return final constructor championship standings for a completed season."""
+    data = _ergast_get(f"{year}/last/constructorStandings")
+    try:
+        standings_list = data["MRData"]["StandingsTable"]["StandingsLists"][0]["ConstructorStandings"]
+    except (KeyError, IndexError):
+        return pd.DataFrame()
+    rows = []
+    for entry in standings_list:
+        rows.append({
+            "team_ergast": entry["Constructor"]["name"],
+            "constructor_points": float(entry["points"]),
+            "constructor_championship_pos": int(entry["position"]),
+        })
+    return pd.DataFrame(rows)
+
+
+def _load_final_season_recent_results(year: int, n_races: int = 3) -> pd.DataFrame:
+    """Return avg finishing stats from the last n_races of a completed season."""
+    data = _ergast_get(f"{year}/last/results")
+    try:
+        last_round = int(data["MRData"]["RaceTable"]["Races"][0]["round"])
+    except (KeyError, IndexError, ValueError):
+        return pd.DataFrame(columns=["driver", "avg_finish_last_n", "dnf_rate_last_n"])
+
+    all_results = []
+    for r in range(max(1, last_round - n_races + 1), last_round + 1):
+        rdata = _ergast_get(f"{year}/{r}/results")
+        try:
+            race_results = rdata["MRData"]["RaceTable"]["Races"][0]["Results"]
+        except (KeyError, IndexError):
+            continue
+        for entry in race_results:
+            status = entry.get("status", "")
+            finished = not any(kw in status for kw in
+                               ("Retired", "Accident", "Mechanical", "Collision", "Disqualified"))
+            all_results.append({
+                "driver": entry["Driver"]["code"],
+                "finish_position": int(entry["position"]),
+                "dnf": 0 if finished else 1,
+            })
+
+    if not all_results:
+        return pd.DataFrame(columns=["driver", "avg_finish_last_n", "dnf_rate_last_n"])
+    df = pd.DataFrame(all_results)
+    return (
+        df.groupby("driver")
+        .agg(avg_finish_last_n=("finish_position", "mean"), dnf_rate_last_n=("dnf", "mean"))
+        .reset_index()
+    )
+
+
 def load_driver_standings_before_round(year: int, round_number: int) -> pd.DataFrame:
     """
     Return driver championship standings after round (round_number - 1).
+    For round 1, falls back to the previous season's final standings.
     Columns: driver, driver_points, driver_wins, driver_championship_pos
     """
     prev_round = round_number - 1
     if prev_round < 1:
-        # First round of the year — return zeros
-        return pd.DataFrame(columns=["driver", "driver_points", "driver_wins", "driver_championship_pos"])
+        # No current-season data yet — use previous season's final standings
+        return _load_final_driver_standings(year - 1)
 
     data = _ergast_get(f"{year}/{prev_round}/driverStandings")
     try:
@@ -239,11 +310,12 @@ def load_driver_standings_before_round(year: int, round_number: int) -> pd.DataF
 def load_constructor_standings_before_round(year: int, round_number: int) -> pd.DataFrame:
     """
     Return constructor championship standings after round (round_number - 1).
+    For round 1, falls back to the previous season's final standings.
     Columns: team_ergast, constructor_points, constructor_championship_pos
     """
     prev_round = round_number - 1
     if prev_round < 1:
-        return pd.DataFrame(columns=["team_ergast", "constructor_points", "constructor_championship_pos"])
+        return _load_final_constructor_standings(year - 1)
 
     data = _ergast_get(f"{year}/{prev_round}/constructorStandings")
     try:
@@ -265,8 +337,12 @@ def load_recent_race_results(year: int, round_number: int, n_races: int = 3) -> 
     """
     Return each driver's average finishing position across the last `n_races`
     races (before this round).
+    For round 1, falls back to the last n_races of the previous season.
     Columns: driver, avg_finish_last_n, dnf_rate_last_n
     """
+    if round_number <= 1:
+        return _load_final_season_recent_results(year - 1, n_races)
+
     all_results = []
     for r in range(max(1, round_number - n_races), round_number):
         data = _ergast_get(f"{year}/{r}/results")
