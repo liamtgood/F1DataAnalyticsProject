@@ -80,7 +80,7 @@ TEAM_COLORS = {
     "Haas F1 Team": "#B6BABD",
 }
 
-ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24, 2025: 24}
+ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24, 2025: 24, 2026: 22}
 
 # Country flag emoji for each 2024 round
 RACE_FLAGS_2024 = {
@@ -138,6 +138,33 @@ RACE_FLAGS_2025 = {
 }
 FLAGS_BY_YEAR = {2024: RACE_FLAGS_2024, 2025: RACE_FLAGS_2025}
 
+# Country flag emoji for each 2026 round
+RACE_FLAGS_2026 = {
+    1:  "🇦🇺",  # Australia
+    2:  "🇨🇳",  # China
+    3:  "🇯🇵",  # Japan
+    4:  "🇺🇸",  # Miami
+    5:  "🇨🇦",  # Canada
+    6:  "🇲🇨",  # Monaco
+    7:  "🇪🇸",  # Barcelona (Spain)
+    8:  "🇦🇹",  # Austria
+    9:  "🇬🇧",  # Britain
+    10: "🇧🇪",  # Belgium
+    11: "🇭🇺",  # Hungary
+    12: "🇳🇱",  # Netherlands
+    13: "🇮🇹",  # Italy
+    14: "🇪🇸",  # Madrid (Spain)
+    15: "🇦🇿",  # Azerbaijan
+    16: "🇸🇬",  # Singapore
+    17: "🇺🇸",  # United States
+    18: "🇲🇽",  # Mexico
+    19: "🇧🇷",  # Brazil
+    20: "🇺🇸",  # Las Vegas
+    21: "🇶🇦",  # Qatar
+    22: "🇦🇪",  # Abu Dhabi
+}
+FLAGS_BY_YEAR = {2024: RACE_FLAGS_2024, 2025: RACE_FLAGS_2025, 2026: RACE_FLAGS_2026}
+
 # 2024 race calendar (round → name).
 RACE_CALENDAR_2024 = {
     1:  "Bahrain GP",
@@ -193,6 +220,33 @@ RACE_CALENDAR_2025 = {
     24: "Abu Dhabi GP",
 }
 CALENDAR_BY_YEAR = {2024: RACE_CALENDAR_2024, 2025: RACE_CALENDAR_2025}
+
+# 2026 race calendar (round → name).
+RACE_CALENDAR_2026 = {
+    1:  "Australian GP",
+    2:  "Chinese GP",
+    3:  "Japanese GP",
+    4:  "Miami GP",
+    5:  "Canadian GP",
+    6:  "Monaco GP",
+    7:  "Barcelona GP",
+    8:  "Austrian GP",
+    9:  "British GP",
+    10: "Belgian GP",
+    11: "Hungarian GP",
+    12: "Dutch GP",
+    13: "Italian GP",
+    14: "Madrid GP",
+    15: "Azerbaijan GP",
+    16: "Singapore GP",
+    17: "United States GP",
+    18: "Mexico City GP",
+    19: "São Paulo GP",
+    20: "Las Vegas GP",
+    21: "Qatar GP",
+    22: "Abu Dhabi GP",
+}
+CALENDAR_BY_YEAR = {2024: RACE_CALENDAR_2024, 2025: RACE_CALENDAR_2025, 2026: RACE_CALENDAR_2026}
 
 # Official F1 CDN circuit map image filenames (from media.formula1.com).
 _F1_CDN_BASE = (
@@ -253,6 +307,32 @@ F1_CDN_FILENAMES_2025 = {
     24: "Abu_Dhabi_Circuit",
 }
 F1_CDN_FILENAMES_BY_YEAR = {2024: F1_CDN_FILENAMES_2024, 2025: F1_CDN_FILENAMES_2025}
+
+F1_CDN_FILENAMES_2026 = {
+    1:  "Australia_Circuit",
+    2:  "China_Circuit",
+    3:  "Japan_Circuit",
+    4:  "Miami_Circuit",
+    5:  "Canada_Circuit",
+    6:  "Monaco_Circuit",
+    7:  "Spain_Circuit",       # Barcelona-Catalunya
+    8:  "Austria_Circuit",
+    9:  "Great_Britain_Circuit",
+    10: "Belgium_Circuit",
+    11: "Hungary_Circuit",
+    12: "Netherlands_Circuit",
+    13: "Italy_Circuit",
+    14: "Madrid_Circuit",     # New Madring circuit — CDN may not exist yet
+    15: "Baku_Circuit",
+    16: "Singapore_Circuit",
+    17: "USA_Circuit",
+    18: "Mexico_Circuit",
+    19: "Brazil_Circuit",
+    20: "Las_Vegas_Circuit",
+    21: "Qatar_Circuit",
+    22: "Abu_Dhabi_Circuit",
+}
+F1_CDN_FILENAMES_BY_YEAR = {2024: F1_CDN_FILENAMES_2024, 2025: F1_CDN_FILENAMES_2025, 2026: F1_CDN_FILENAMES_2026}
 
 # ---------------------------------------------------------------------------
 # Cached loaders
@@ -318,6 +398,47 @@ def load_models():
         models["race"] = joblib.load(rm_path)
         models["race_cols"] = joblib.load(rm_cols_path)
     return models
+
+
+@st.cache_data(show_spinner="Computing season accuracy...", ttl=3600)
+def load_season_accuracy(year: int, calendar: dict) -> pd.DataFrame:
+    """
+    For each completed round in the season, run predictions and compute
+    qualifying + race MAE. Returns a DataFrame with one row per round.
+    """
+    setup_cache("cache")
+    from src.pipeline import predict_race
+    from src.data_loader import load_race_results, load_qualifying_results
+    rows = []
+    for rnd, name in calendar.items():
+        try:
+            # Check if actual results exist (race has happened)
+            rr = load_race_results(year, rnd)
+            if rr.empty:
+                continue
+            result = predict_race(year, rnd, use_actual_grid=False)
+            q_df = result["qualifying"]
+            r_df = result["race"]
+            row = {"round": rnd, "race": name}
+            if "actual_grid_pos" in q_df.columns:
+                mask = q_df["actual_grid_pos"].notna()
+                if mask.sum() >= 2:
+                    row["quali_mae"] = float(
+                        (q_df.loc[mask, "predicted_grid_pos"] - q_df.loc[mask, "actual_grid_pos"]).abs().mean()
+                    )
+            if "actual_finish_pos" in r_df.columns:
+                mask = r_df["actual_finish_pos"].notna()
+                if "dnf" in r_df.columns:
+                    mask = mask & (r_df["dnf"].fillna(0).astype(int) == 0)
+                if mask.sum() >= 2:
+                    row["race_mae"] = float(
+                        (r_df.loc[mask, "predicted_finish_pos"] - r_df.loc[mask, "actual_finish_pos"]).abs().mean()
+                    )
+            if len(row) > 2:
+                rows.append(row)
+        except Exception:
+            continue
+    return pd.DataFrame(rows)
 
 
 @st.cache_data(show_spinner="Running predictions...", ttl=3600)
@@ -490,16 +611,18 @@ def qualifying_timing_html(df: pd.DataFrame, lap_col) -> str:
     return _tt_table(thead, tbody)
 
 
-def race_timing_html(df: pd.DataFrame) -> str:
+def race_timing_html(df: pd.DataFrame, mae: float = 3.1) -> str:
     df = df.sort_values("predicted_finish_pos").reset_index(drop=True)
     has_grid = "grid_used" in df.columns
     has_chg = "position_change" in df.columns
     has_actual = "actual_finish_pos" in df.columns
+    n_drivers = len(df)
     thead = _th("Pos", "center") + _th("Driver")
     if has_grid:
         thead += _th("Grid", "center")
     if has_chg:
         thead += _th("\u0394 Pos", "center")
+    thead += _th("Range", "center")
     if has_actual:
         thead += _th("Actual", "center")
     tbody = ""
@@ -522,9 +645,20 @@ def race_timing_html(df: pd.DataFrame) -> str:
             else:
                 chg_html = '<span style="color:#555;">—</span>'
             cells += f'<td style="{_TC}text-align:center;">{chg_html}</td>'
+        lo = max(1, round(pos - mae))
+        hi = min(n_drivers, round(pos + mae))
+        cells += f'<td style="{_TC}text-align:center;color:#666;font-size:11px;">{lo}–{hi}</td>'
         if has_actual:
             act = row.get("actual_finish_pos")
-            cells += f'<td style="{_TC}text-align:center;color:#aaa;">{int(act) if pd.notna(act) else "—"}</td>'
+            is_dnf = int(row.get("dnf", 0)) == 1
+            if is_dnf:
+                label = str(row.get("retire_label", "")) or "DNF"
+                act_html = f'<span style="color:#E8002D;font-size:10px;font-weight:600;">{label}</span>'
+            elif pd.notna(act):
+                act_html = str(int(act))
+            else:
+                act_html = "—"
+            cells += f'<td style="{_TC}text-align:center;color:#aaa;">{act_html}</td>'
         tbody += cells + "</tr>"
     return _tt_table(thead, tbody)
 
@@ -696,7 +830,7 @@ with st.sidebar:
     st.markdown("Two-stage ML pipeline: **Practice → Quali → Race**")
     st.divider()
 
-    year = st.selectbox("Season", [2024, 2025], index=1)
+    year = st.selectbox("Season", [2024, 2025, 2026], index=2)
     calendar = CALENDAR_BY_YEAR.get(year, {})
     race_options = list(calendar.items())  # [(round, name), ...]
     race_labels = [f"R{r} — {name}" for r, name in race_options]
@@ -824,14 +958,17 @@ elif _active_section == "🏁 Race Prediction":
     race_df = result["race"]
 
     # Accuracy badges (only when actual finishing positions are available)
+    rm = {}
     if "actual_finish_pos" in race_df.columns:
+        _finished = race_df[race_df["dnf"].fillna(0).astype(int) == 0] if "dnf" in race_df.columns else race_df
         rm = accuracy_metrics(
-            race_df.set_index("driver")["predicted_finish_pos"],
-            race_df.set_index("driver")["actual_finish_pos"],
+            _finished.set_index("driver")["predicted_finish_pos"],
+            _finished.set_index("driver")["actual_finish_pos"],
         )
         show_metric_badges(rm)
 
-    st.markdown(race_timing_html(race_df), unsafe_allow_html=True)
+    _race_mae = rm.get("mae", 3.1)
+    st.markdown(race_timing_html(race_df, mae=_race_mae), unsafe_allow_html=True)
 
     # Monte Carlo position probability chart
     if result.get("race_probs") is not None:
@@ -889,17 +1026,19 @@ elif _active_section == "🎯 Accuracy":
         with acc_col2:
             st.markdown("#### Race Model")
             if has_race_actual:
+                _race_df = result["race"]
+                _finished = _race_df[_race_df["dnf"].fillna(0).astype(int) == 0] if "dnf" in _race_df.columns else _race_df
                 rm = accuracy_metrics(
-                    result["race"].set_index("driver")["predicted_finish_pos"],
-                    result["race"].set_index("driver")["actual_finish_pos"],
+                    _finished.set_index("driver")["predicted_finish_pos"],
+                    _finished.set_index("driver")["actual_finish_pos"],
                 )
                 show_metric_badges(rm)
                 fig_rs = accuracy_scatter(
                     "predicted_finish_pos", "actual_finish_pos",
-                    result["race"].set_index("driver").reset_index(),
+                    _finished.set_index("driver").reset_index(),
                     xlabel="Actual Finishing Position",
                     ylabel="Predicted Finishing Position",
-                    title="Race: Predicted vs Actual",
+                    title="Race: Predicted vs Actual (finishers only)",
                 )
                 st.plotly_chart(fig_rs, use_container_width=True)
             else:
@@ -913,7 +1052,10 @@ elif _active_section == "🎯 Accuracy":
             qe["quali_error"] = (qe["predicted_grid_pos"] - qe["actual_grid_pos"]).round(1)
             err_frames.append(qe.set_index("driver")[["predicted_grid_pos", "actual_grid_pos", "quali_error"]])
         if has_race_actual:
-            re = result["race"][["driver", "predicted_finish_pos", "actual_finish_pos"]].copy()
+            re = result["race"][["driver", "predicted_finish_pos", "actual_finish_pos"] + 
+                                 (["dnf"] if "dnf" in result["race"].columns else [])].copy()
+            if "dnf" in re.columns:
+                re = re[re["dnf"].fillna(0).astype(int) == 0]
             re["race_error"] = (re["predicted_finish_pos"] - re["actual_finish_pos"]).round(1)
             err_frames.append(re.set_index("driver")[["predicted_finish_pos", "actual_finish_pos", "race_error"]])
 
@@ -922,6 +1064,40 @@ elif _active_section == "🎯 Accuracy":
             err_df = err_df.reset_index()
             err_df.columns = [c.replace("_", " ").title() for c in err_df.columns]
             st.dataframe(err_df, use_container_width=True, hide_index=True)
+
+        # Rolling accuracy across the season
+        st.markdown("#### Season Rolling Accuracy")
+        st.caption("MAE per race across all completed rounds this season. Lower is better.")
+        with st.spinner("Loading season accuracy..."):
+            season_acc = load_season_accuracy(year, CALENDAR_BY_YEAR.get(year, {}))
+        if season_acc.empty:
+            st.info("Not enough completed races to show rolling accuracy yet.")
+        else:
+            fig_roll = go.Figure()
+            if "quali_mae" in season_acc.columns:
+                fig_roll.add_trace(go.Scatter(
+                    x=season_acc["race"], y=season_acc["quali_mae"],
+                    mode="lines+markers", name="Qualifying MAE",
+                    line=dict(color="#00D2BE", width=2),
+                    marker=dict(size=7),
+                ))
+            if "race_mae" in season_acc.columns:
+                fig_roll.add_trace(go.Scatter(
+                    x=season_acc["race"], y=season_acc["race_mae"],
+                    mode="lines+markers", name="Race MAE",
+                    line=dict(color="#E8002D", width=2),
+                    marker=dict(size=7),
+                ))
+            fig_roll.update_layout(
+                height=380,
+                yaxis=dict(title="Mean Absolute Error (positions)", rangemode="tozero"),
+                xaxis=dict(tickangle=-35),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color="white",
+                legend=dict(orientation="h", y=1.05),
+                margin=dict(l=20, r=20, t=30, b=80),
+            )
+            st.plotly_chart(fig_roll, use_container_width=True)
 
 # ===========================================================================
 # Section 4 – Practice Data

@@ -205,11 +205,23 @@ def build_race_features(year: int, round_number: int,
         logger.warning("No race results for year=%d round=%d, skipping.", year, round_number)
         return pd.DataFrame()
 
+    def _retire_label(status: str) -> str:
+        s = str(status)
+        if any(kw in s for kw in ("Finished", "Lapped", "+")):
+            return ""
+        sl = s.lower()
+        if "not qualify" in sl or sl in ("dnq", "107%"):
+            return "DNQ"
+        if "not start" in sl or sl == "dns" or "withdrew" in sl:
+            return "DNS"
+        if "disqualified" in sl or sl == "dsq":
+            return "DSQ"
+        return "DNF"
+
     feat = race[["driver", "team", "finish_position", "grid_position", "pit_stops", "status"]].copy()
     feat["team"] = feat["team"].apply(_normalize_team)
-    feat["dnf"] = feat["status"].apply(
-        lambda s: 0 if any(kw in str(s) for kw in ("Finished", "+")) else 1
-    )
+    feat["retire_label"] = feat["status"].apply(_retire_label)
+    feat["dnf"] = (feat["retire_label"] != "").astype(int)
 
     # Use predicted grid if provided (inference mode), else actual
     if predicted_grid is not None and not predicted_grid.empty:
@@ -226,8 +238,28 @@ def build_race_features(year: int, round_number: int,
     # ---- Qualifying pace ----
     if not quali.empty:
         feat = feat.merge(quali[["driver", "q_best_lap_s"]], on="driver", how="left")
+        pole_time = feat["q_best_lap_s"].min()
+        feat["q_gap_to_pole_s"] = (feat["q_best_lap_s"] - pole_time).round(4)
+        # Teammate qualifying delta (how much slower than faster team-mate)
+        team_best_q = feat.groupby("team")["q_best_lap_s"].min().reset_index()
+        team_best_q = team_best_q.rename(columns={"q_best_lap_s": "_team_q_best"})
+        feat = feat.merge(team_best_q, on="team", how="left")
+        feat["q_teammate_gap_s"] = (feat["q_best_lap_s"] - feat["_team_q_best"]).round(4)
+        feat = feat.drop(columns=["_team_q_best"])
     else:
         feat["q_best_lap_s"] = np.nan
+        feat["q_gap_to_pole_s"] = np.nan
+        feat["q_teammate_gap_s"] = np.nan
+
+    # ---- Pace vs grid mismatch ----
+    # grid_vs_pace_delta > 0: starting worse than pace implies (grid penalty / bad quali) -> will climb
+    # grid_vs_pace_delta < 0: starting better than pace implies -> may drop back
+    if feat["q_gap_to_pole_s"].notna().any():
+        feat["_pace_rank"] = feat["q_gap_to_pole_s"].rank(method="first")
+        feat["grid_vs_pace_delta"] = feat["grid_used"] - feat["_pace_rank"]
+        feat = feat.drop(columns=["_pace_rank"])
+    else:
+        feat["grid_vs_pace_delta"] = 0.0
 
     # ---- Practice pace features (race trim proxy) ----
     # FP3 is closest to race setup; FP2 long-run pace is also informative
@@ -374,7 +406,7 @@ def _get_overtake_index(circuit_name: str) -> float:
 # ---------------------------------------------------------------------------
 
 # FastF1 round counts per year
-ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24, 2025: 24} 
+ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24, 2025: 24, 2026: 22}
 
 
 def build_and_save_dataset(
@@ -402,6 +434,20 @@ def build_and_save_dataset(
             round_count = list(range(3, ROUNDS_PER_YEAR.get(year, 22) + 1))
 
         for rnd in round_count:
+            # Skip rounds that haven't happened yet
+            try:
+                import fastf1 as _ff1
+                from datetime import datetime, timezone
+                _evt = _ff1.get_event(year, rnd)
+                _race_date = _evt.get_session_date("Race", utc=True)
+                if hasattr(_race_date, "tzinfo") and _race_date.tzinfo is None:
+                    _race_date = _race_date.replace(tzinfo=timezone.utc)
+                if _race_date > datetime.now(timezone.utc):
+                    logger.info("Skipping future round year=%d round=%d (%s)", year, rnd, _evt["EventName"])
+                    continue
+            except Exception:
+                pass  # if we can't determine date, attempt anyway
+
             logger.info("Processing year=%d round=%d ...", year, rnd)
             try:
                 qf = build_qualifying_features(year, rnd)

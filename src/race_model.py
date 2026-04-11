@@ -37,8 +37,10 @@ logger = logging.getLogger(__name__)
 FEATURE_COLS = [
     # Grid position — used as offset to reconstruct finish pos, still a signal
     "grid_used",
-    # Qualifying pace proxy
-    "q_best_lap_s",
+    # Qualifying pace — relative measures are the strongest race-outcome signals
+    "q_gap_to_pole_s",       # gap to fastest qualifier (circuit-agnostic)
+    "q_teammate_gap_s",      # gap to faster team-mate in qualifying
+    "q_best_lap_s",          # absolute lap time (kept for completeness)
     # FP3 pace (race-trim proxy — closest session to race setup)
     "fp3_race_lap_delta_s",
     "fp3_race_s1_delta_s",
@@ -63,6 +65,8 @@ FEATURE_COLS = [
     # Circuit context
     "is_street_circuit",
     "overtake_index",
+    # Pace vs grid mismatch — positive means starting WORSE than pace implies (will climb)
+    "grid_vs_pace_delta",
 ]
 
 TARGET_COL = "finish_position"
@@ -71,6 +75,11 @@ TARGET_COL = "finish_position"
 def _load_data(csv_path: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     df = df.dropna(subset=[TARGET_COL, "grid_used"])
+    # Derive grid_vs_pace_delta per race: how many places worse than pace-implied position
+    if "q_gap_to_pole_s" in df.columns:
+        df["_pace_rank"] = df.groupby(["year", "round"])["q_gap_to_pole_s"].rank(method="first")
+        df["grid_vs_pace_delta"] = df["grid_used"] - df["_pace_rank"]
+        df = df.drop(columns=["_pace_rank"])
     return df
 
 

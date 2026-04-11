@@ -158,8 +158,10 @@ def predict_race(
     if use_actual_grid:
         quali_feat["predicted_grid_pos"] = quali_feat["grid_position"]
         quali_feat["predicted_grid_delta"] = 0.0
-        quali_result = quali_feat[["driver", "team", "grid_position", "predicted_grid_pos",
-                                   "predicted_grid_delta"]].copy()
+        _actual_cols = ["driver", "team", "grid_position", "predicted_grid_pos", "predicted_grid_delta"]
+        if "q_best_lap_s" in quali_feat.columns:
+            _actual_cols.append("q_best_lap_s")
+        quali_result = quali_feat[_actual_cols].copy()
     elif mc_samples > 1:
         import joblib, xgboost as xgb
         _qm_model = xgb.XGBRegressor()
@@ -253,6 +255,12 @@ def predict_race(
         race_display["position_change"] = (
             race_display["grid_used"].astype(float) - race_display["predicted_finish_pos"].astype(float)
         ).round(1)
+    if "dnf" in race_result.columns:
+        dnf_map = race_result.set_index("driver")["dnf"]
+        race_display["dnf"] = race_display["driver"].map(dnf_map).fillna(0).astype(int)
+    if "retire_label" in race_result.columns:
+        label_map = race_result.set_index("driver")["retire_label"]
+        race_display["retire_label"] = race_display["driver"].map(label_map).fillna("")
 
     return {
         "qualifying": quali_display,
