@@ -198,6 +198,7 @@ def show_metric_badges(metrics: dict) -> None:
     c3.metric("Top-3 Hit Rate", f"{metrics['top3_hit']:.0%}")
 
 
+def shap_bar_chart(shap_values, feature_names: list, title: str):
     mean_abs = np.abs(shap_values).mean(axis=0)
     feat_imp = pd.DataFrame({"feature": feature_names, "importance": mean_abs})
     feat_imp = feat_imp.sort_values("importance", ascending=True).tail(15)

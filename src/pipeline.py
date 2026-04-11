@@ -93,7 +93,8 @@ def predict_race(
         .reset_index(drop=True)
     )
     if "grid_position" in quali_result.columns:
-        quali_display["actual_grid_pos"] = quali_result["grid_position"].values
+        actual_grid_map = quali_result.set_index("driver")["grid_position"]
+        quali_display["actual_grid_pos"] = quali_display["driver"].map(actual_grid_map)
 
     # ------------------------------------------------------------------
     # Stage 2: Race prediction
@@ -129,8 +130,10 @@ def predict_race(
 
     race_display = race_result[["driver", "team", "predicted_finish_pos", "predicted_finish_score"]].copy()
     if "finish_position" in race_result.columns:
-        race_display["actual_finish_pos"] = race_result["finish_position"].values
-        race_display["grid_used"] = race_result["grid_used"].values
+        actual_finish_map = race_result.set_index("driver")["finish_position"]
+        actual_grid_map2 = race_result.set_index("driver")["grid_used"]
+        race_display["actual_finish_pos"] = race_display["driver"].map(actual_finish_map)
+        race_display["grid_used"] = race_display["driver"].map(actual_grid_map2)
         race_display["position_change"] = (
             race_display["grid_used"].astype(float) - race_display["predicted_finish_pos"].astype(float)
         ).round(1)
