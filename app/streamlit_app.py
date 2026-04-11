@@ -566,14 +566,14 @@ def practice_timing_html(sess_df: pd.DataFrame, team_map: dict) -> str:
     return _tt_table(thead, tbody)
 
 
-def qualifying_timing_html(df: pd.DataFrame, lap_col) -> str:
+def qualifying_timing_html(df: pd.DataFrame, lap_col, lap_col_label: str = "Lap Time") -> str:
     df = df.sort_values("predicted_grid_pos").reset_index(drop=True)
     has_lap = bool(lap_col and lap_col in df.columns)
     has_gap = "proj_pole_gap_s" in df.columns
     has_actual = "actual_grid_pos" in df.columns
     thead = _th("P", "center") + _th("Driver")
     if has_lap:
-        thead += _th("Lap Time")
+        thead += _th(lap_col_label)
     if has_gap:
         thead += _th("Gap to Pole")
     if has_actual:
@@ -853,13 +853,7 @@ with st.sidebar:
         help="Skip Stage 1 and feed actual grid positions into the race model",
     )
 
-    st.markdown("**Monte Carlo Samples**")
-    mc_samples = st.select_slider(
-        "Simulations",
-        options=[1, 50, 100, 200, 500],
-        value=100,
-        help="Add Gaussian noise to features and average over N runs. More samples → smoother probabilities, slower prediction.",
-    )
+    mc_samples = 100
 
     st.divider()
     models_loaded = Path("models/race_model.pkl").exists() and Path("models/qualifying_model.json").exists()
@@ -867,8 +861,6 @@ with st.sidebar:
         st.success("Models loaded ✓")
     else:
         st.warning("Models not trained yet.\nRun:\n```\npython -m src.qualifying_model train\npython -m src.race_model train\n```")
-
-    run_btn = st.button("▶ Run Prediction", type="primary", disabled=not models_loaded, use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # Main
@@ -924,9 +916,14 @@ if _active_section == "📊 Qualifying":
         qual_df["proj_pole_gap_s"] = (qual_df["q_best_lap_s"] - pole_time_s).round(3)
         proj_pole_label = _fmt_laptime(pole_time_s)
         lap_col = "q_best_lap_s"
+    elif "fp_theoretical_best_s" in qual_df.columns and qual_df["fp_theoretical_best_s"].notna().any():
+        # Predicted mode: show theoretical best lap (personal-best sectors from practice)
+        pole_time_s = qual_df["fp_theoretical_best_s"].min()
+        qual_df["proj_pole_gap_s"] = qual_df["fp_theoretical_gap_s"].round(3)
+        proj_pole_label = _fmt_laptime(pole_time_s)
+        lap_col = "fp_theoretical_best_s"
     elif "fp3_lap_delta_s" in qual_df.columns:
-        # Use FP3 deltas as a proxy; fastest driver projected as baseline
-        fp3_best_proxy = qual_df["fp3_lap_delta_s"].min()  # 0 for the quickest
+        fp3_best_proxy = qual_df["fp3_lap_delta_s"].min()
         qual_df["proj_pole_gap_s"] = (qual_df["fp3_lap_delta_s"] - fp3_best_proxy).round(3)
         proj_pole_label = "(FP3-based estimate)"
         lap_col = None
@@ -935,10 +932,16 @@ if _active_section == "📊 Qualifying":
         lap_col = None
 
     if proj_pole_label:
-        label_prefix = "Actual pole lap" if lap_col else "Estimated pole lap (FP3-based)"
+        if lap_col == "q_best_lap_s":
+            label_prefix = "Actual pole lap"
+        elif lap_col == "fp_theoretical_best_s":
+            label_prefix = "Projected pole lap (best practice sectors)"
+        else:
+            label_prefix = "Estimated pole lap (FP3-based)"
         st.markdown(f"**{label_prefix}:** `{proj_pole_label}`")
 
-    st.markdown(qualifying_timing_html(qual_df, lap_col), unsafe_allow_html=True)
+    _lap_col_label = "Proj. Lap Time" if lap_col == "fp_theoretical_best_s" else "Lap Time"
+    st.markdown(qualifying_timing_html(qual_df, lap_col, _lap_col_label), unsafe_allow_html=True)
 
     # SHAP
     st.subheader("Feature Importance (Qualifying Model)")

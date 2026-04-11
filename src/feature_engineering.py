@@ -126,6 +126,22 @@ def build_qualifying_features(year: int, round_number: int) -> pd.DataFrame:
         fp3_pace["fp3_teammate_delta_s"] = fp3_pace["best_lap_time_s"] - fp3_pace["teammate_best_s"]
         feat = feat.merge(fp3_pace[["driver", "fp3_teammate_delta_s"]], on="driver", how="left")
 
+    # ---- Theoretical best lap (personal-best sectors across all practice sessions) ----
+    if not practice.empty:
+        _all_fp = practice[practice["session"].isin(["FP1", "FP2", "FP3"])].copy()
+        _theo = _all_fp.groupby("driver").agg(
+            _s1=("s1_best_s", "min"),
+            _s2=("s2_best_s", "min"),
+            _s3=("s3_best_s", "min"),
+        ).reset_index()
+        _theo["fp_theoretical_best_s"] = _theo["_s1"] + _theo["_s2"] + _theo["_s3"]
+        _best_theo = _theo["fp_theoretical_best_s"].min()
+        _theo["fp_theoretical_gap_s"] = (_theo["fp_theoretical_best_s"] - _best_theo).round(4)
+        feat = feat.merge(_theo[["driver", "fp_theoretical_best_s", "fp_theoretical_gap_s"]], on="driver", how="left")
+    else:
+        feat["fp_theoretical_best_s"] = np.nan
+        feat["fp_theoretical_gap_s"] = np.nan
+
     # ---- Ergast form features ----
     driver_standings = load_driver_standings_before_round(year, round_number)
     constructor_standings = load_constructor_standings_before_round(year, round_number)
@@ -294,6 +310,21 @@ def build_race_features(year: int, round_number: int,
                 f"{prefix}_race_speed_max", f"{prefix}_race_teammate_delta_s"]
         feat = feat.merge(pace[keep], on="driver", how="left")
 
+    # ---- Theoretical best lap (personal-best sectors across all practice sessions) ----
+    if not practice.empty:
+        _all_fp = practice[practice["session"].isin(["FP1", "FP2", "FP3"])].copy()
+        _theo = _all_fp.groupby("driver").agg(
+            _s1=("s1_best_s", "min"),
+            _s2=("s2_best_s", "min"),
+            _s3=("s3_best_s", "min"),
+        ).reset_index()
+        _theo["fp_theoretical_best_s"] = _theo["_s1"] + _theo["_s2"] + _theo["_s3"]
+        _best_theo = _theo["fp_theoretical_best_s"].min()
+        _theo["fp_theoretical_gap_s"] = (_theo["fp_theoretical_best_s"] - _best_theo).round(4)
+        feat = feat.merge(_theo[["driver", "fp_theoretical_gap_s"]], on="driver", how="left")
+    else:
+        feat["fp_theoretical_gap_s"] = np.nan
+
     # ---- Ergast form features ----
     driver_standings = load_driver_standings_before_round(year, round_number)
     constructor_standings = load_constructor_standings_before_round(year, round_number)
@@ -366,16 +397,16 @@ _OVERTAKE_INDEX_MAP: list[tuple[str, float]] = [
     ("marina bay",      0.25),
     ("zandvoort",       0.30),
     ("albert park",     0.35),
-    ("imola",           0.35),
-    ("enzo e dino",     0.35),  # Imola alternate Ergast name
-    ("barcelona",       0.40),
-    ("catalunya",       0.40),
-    ("suzuka",          0.45),
-    ("yas marina",      0.45),
+    ("imola",           0.25),
+    ("enzo e dino",     0.25),  # Imola alternate Ergast name
+    ("barcelona",       0.35),
+    ("catalunya",       0.35),
+    ("suzuka",          0.35),
+    ("yas marina",      0.40),
     ("miami",           0.45),
     ("jeddah",          0.45),
     ("lusail",          0.50),
-    ("silverstone",     0.55),
+    ("silverstone",     0.65),
     ("baku",            0.55),
     ("hermanos",        0.55),  # Mexico
     ("circuit of the americas", 0.60),
@@ -387,8 +418,8 @@ _OVERTAKE_INDEX_MAP: list[tuple[str, float]] = [
     ("interlagos",      0.65),
     ("josé carlos pace", 0.65),  # Brazil alternate
     ("spa",             0.75),
-    ("monza",           0.75),
-    ("nazionale di monza", 0.75),
+    ("monza",           0.65),
+    ("nazionale di monza", 0.65),
 ]
 _OVERTAKE_INDEX_DEFAULT = 0.50
 

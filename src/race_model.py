@@ -41,6 +41,7 @@ FEATURE_COLS = [
     "q_gap_to_pole_s",       # gap to fastest qualifier (circuit-agnostic)
     "q_teammate_gap_s",      # gap to faster team-mate in qualifying
     "q_best_lap_s",          # absolute lap time (kept for completeness)
+    "fp_theoretical_gap_s", # projected qualifying time from best practice sectors
     # FP3 pace (race-trim proxy — closest session to race setup)
     "fp3_race_lap_delta_s",
     "fp3_race_s1_delta_s",

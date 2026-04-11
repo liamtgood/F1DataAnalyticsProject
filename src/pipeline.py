@@ -187,9 +187,16 @@ def predict_race(
         .sort_values("predicted_grid_pos")
         .reset_index(drop=True)
     )
-    if "q_best_lap_s" in quali_result.columns:
+    if use_actual_grid and "q_best_lap_s" in quali_result.columns:
         q_lap_map = quali_result.set_index("driver")["q_best_lap_s"]
         quali_display["q_best_lap_s"] = quali_display["driver"].map(q_lap_map)
+    # Theoretical best lap (S1+S2+S3 personal bests across practice) for display when no actual quali
+    if "fp_theoretical_best_s" in quali_feat.columns:
+        theo_map = quali_feat.set_index("driver")["fp_theoretical_best_s"]
+        quali_display["fp_theoretical_best_s"] = quali_display["driver"].map(theo_map)
+    if "fp_theoretical_gap_s" in quali_feat.columns:
+        theo_gap_map = quali_feat.set_index("driver")["fp_theoretical_gap_s"]
+        quali_display["fp_theoretical_gap_s"] = quali_display["driver"].map(theo_gap_map)
     if "grid_position" in quali_result.columns:
         actual_grid_map = quali_result.set_index("driver")["grid_position"]
         quali_display["actual_grid_pos"] = quali_display["driver"].map(actual_grid_map)

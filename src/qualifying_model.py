@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 # Feature columns used for training
 # ---------------------------------------------------------------------------
 FEATURE_COLS = [
+    # Projected qualifying time (best sectors across all practice sessions)
+    "fp_theoretical_gap_s",
     # FP3 (most important – closest to qualifying)
     "fp3_lap_delta_s",
     "fp3_s1_delta_s",
