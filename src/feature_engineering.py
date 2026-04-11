@@ -293,6 +293,7 @@ def build_race_features(year: int, round_number: int,
     # ---- Circuit info ----
     circuit = load_circuit_info(year, round_number)
     feat["is_street_circuit"] = circuit["is_street_circuit"]
+    feat["overtake_index"] = _get_overtake_index(circuit["circuit_name"])
     feat["year"] = year
     feat["round"] = round_number
     feat["circuit_name"] = circuit["circuit_name"]
@@ -315,7 +316,57 @@ def build_race_features(year: int, round_number: int,
     numeric_cols = feat.select_dtypes(include=[np.number]).columns
     feat[numeric_cols] = feat[numeric_cols].fillna(feat[numeric_cols].median())
 
+    # ---- Delta target ----
+    # position_delta = finish_position - grid_used  (negative = positions gained)
+    feat["position_delta"] = feat["finish_position"] - feat["grid_used"]
+
     return feat.reset_index(drop=True)
+
+
+# ---------------------------------------------------------------------------
+# Overtake difficulty index
+# ---------------------------------------------------------------------------
+# Scale: 0.0 (nearly impossible to pass) → 1.0 (lots of passing).
+# Matched by checking if the key is a lowercase substring of the circuit name.
+_OVERTAKE_INDEX_MAP: list[tuple[str, float]] = [
+    ("monaco",          0.05),
+    ("hungaroring",     0.15),
+    ("marina bay",      0.25),
+    ("zandvoort",       0.30),
+    ("albert park",     0.35),
+    ("imola",           0.35),
+    ("enzo e dino",     0.35),  # Imola alternate Ergast name
+    ("barcelona",       0.40),
+    ("catalunya",       0.40),
+    ("suzuka",          0.45),
+    ("yas marina",      0.45),
+    ("miami",           0.45),
+    ("jeddah",          0.45),
+    ("lusail",          0.50),
+    ("silverstone",     0.55),
+    ("baku",            0.55),
+    ("hermanos",        0.55),  # Mexico
+    ("circuit of the americas", 0.60),
+    ("red bull ring",   0.60),
+    ("shanghai",        0.60),
+    ("gilles villeneuve", 0.60),  # Canada
+    ("las vegas",       0.60),
+    ("bahrain",         0.65),
+    ("interlagos",      0.65),
+    ("josé carlos pace", 0.65),  # Brazil alternate
+    ("spa",             0.75),
+    ("monza",           0.75),
+    ("nazionale di monza", 0.75),
+]
+_OVERTAKE_INDEX_DEFAULT = 0.50
+
+
+def _get_overtake_index(circuit_name: str) -> float:
+    name_lower = circuit_name.lower()
+    for keyword, value in _OVERTAKE_INDEX_MAP:
+        if keyword in name_lower:
+            return value
+    return _OVERTAKE_INDEX_DEFAULT
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +374,7 @@ def build_race_features(year: int, round_number: int,
 # ---------------------------------------------------------------------------
 
 # FastF1 round counts per year
-ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24}
+ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24, 2025: 24} 
 
 
 def build_and_save_dataset(

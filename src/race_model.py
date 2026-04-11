@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Feature columns
 # ---------------------------------------------------------------------------
 FEATURE_COLS = [
-    # Grid position is the single most predictive feature
+    # Grid position — used as offset to reconstruct finish pos, still a signal
     "grid_used",
     # Qualifying pace proxy
     "q_best_lap_s",
@@ -62,6 +62,7 @@ FEATURE_COLS = [
     "constructor_championship_pos",
     # Circuit context
     "is_street_circuit",
+    "overtake_index",
 ]
 
 TARGET_COL = "finish_position"
@@ -180,9 +181,6 @@ def predict(
     model = joblib.load(model_path)
     feature_cols = joblib.load(feature_cols_path)
 
-    # Rebuild as an explicit float64 DataFrame with exact column names.
-    # Guards against dtype/index edge cases that cause LightGBM to reject
-    # the input when feature names can't be validated.
     X_raw = features_df.reindex(columns=feature_cols, fill_value=0.0).fillna(0.0)
     X = pd.DataFrame(X_raw.to_numpy(dtype=np.float64), columns=feature_cols)
     out = features_df.copy()

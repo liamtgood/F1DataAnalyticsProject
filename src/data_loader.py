@@ -220,9 +220,9 @@ def _load_final_driver_standings(year: int) -> pd.DataFrame:
     for entry in standings_list:
         rows.append({
             "driver": entry["Driver"]["code"],
-            "driver_points": float(entry["points"]),
-            "driver_wins": int(entry["wins"]),
-            "driver_championship_pos": int(entry["position"]),
+            "driver_points": float(entry.get("points", 0)),
+            "driver_wins": int(entry.get("wins", 0)),
+            "driver_championship_pos": int(entry.get("position", 99)),
         })
     return pd.DataFrame(rows)
 
@@ -238,8 +238,8 @@ def _load_final_constructor_standings(year: int) -> pd.DataFrame:
     for entry in standings_list:
         rows.append({
             "team_ergast": entry["Constructor"]["name"],
-            "constructor_points": float(entry["points"]),
-            "constructor_championship_pos": int(entry["position"]),
+            "constructor_points": float(entry.get("points", 0)),
+            "constructor_championship_pos": int(entry.get("position", 99)),
         })
     return pd.DataFrame(rows)
 
@@ -260,12 +260,17 @@ def _load_final_season_recent_results(year: int, n_races: int = 3) -> pd.DataFra
         except (KeyError, IndexError):
             continue
         for entry in race_results:
+            pos = entry.get("position")
+            try:
+                pos = int(pos)
+            except (TypeError, ValueError):
+                continue
             status = entry.get("status", "")
             finished = not any(kw in status for kw in
                                ("Retired", "Accident", "Mechanical", "Collision", "Disqualified"))
             all_results.append({
                 "driver": entry["Driver"]["code"],
-                "finish_position": int(entry["position"]),
+                "finish_position": pos,
                 "dnf": 0 if finished else 1,
             })
 
@@ -300,9 +305,9 @@ def load_driver_standings_before_round(year: int, round_number: int) -> pd.DataF
     for entry in standings_list:
         rows.append({
             "driver": entry["Driver"]["code"],
-            "driver_points": float(entry["points"]),
-            "driver_wins": int(entry["wins"]),
-            "driver_championship_pos": int(entry["position"]),
+            "driver_points": float(entry.get("points", 0)),
+            "driver_wins": int(entry.get("wins", 0)),
+            "driver_championship_pos": int(entry.get("position", 99)),
         })
     return pd.DataFrame(rows)
 
@@ -327,8 +332,8 @@ def load_constructor_standings_before_round(year: int, round_number: int) -> pd.
     for entry in standings_list:
         rows.append({
             "team_ergast": entry["Constructor"]["name"],
-            "constructor_points": float(entry["points"]),
-            "constructor_championship_pos": int(entry["position"]),
+            "constructor_points": float(entry.get("points", 0)),
+            "constructor_championship_pos": int(entry.get("position", 99)),
         })
     return pd.DataFrame(rows)
 
@@ -351,11 +356,16 @@ def load_recent_race_results(year: int, round_number: int, n_races: int = 3) -> 
         except (KeyError, IndexError):
             continue
         for entry in race_results:
+            pos = entry.get("position")
+            try:
+                pos = int(pos)
+            except (TypeError, ValueError):
+                continue
             status = entry.get("status", "")
             finished = not any(kw in status for kw in ("Retired", "Accident", "Mechanical", "Collision", "Disqualified"))
             all_results.append({
                 "driver": entry["Driver"]["code"],
-                "finish_position": int(entry["position"]),
+                "finish_position": pos,
                 "dnf": 0 if finished else 1,
             })
 

@@ -55,12 +55,10 @@ st.markdown("""
 [data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-of-type {
     display: none !important;
 }
-/* selected item */
-[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"] {
-    background: transparent;
-}
-[data-testid="stSidebar"] [data-testid="stRadio"] input:checked + div,
-[data-testid="stSidebar"] [data-testid="stRadio"] input:checked ~ div {
+/* selected item — highlighted rectangle */
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+    background: rgba(200, 16, 46, 0.18);
+    border: 1px solid rgba(200, 16, 46, 0.55);
     font-weight: 600;
 }
 </style>
@@ -82,7 +80,7 @@ TEAM_COLORS = {
     "Haas F1 Team": "#B6BABD",
 }
 
-ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24}
+ROUNDS_PER_YEAR = {2022: 22, 2023: 22, 2024: 24, 2025: 24}
 
 # Country flag emoji for each 2024 round
 RACE_FLAGS_2024 = {
@@ -111,7 +109,34 @@ RACE_FLAGS_2024 = {
     23: "🇶🇦",  # Qatar
     24: "🇦🇪",  # Abu Dhabi
 }
-FLAGS_BY_YEAR = {2024: RACE_FLAGS_2024}
+# Country flag emoji for each 2025 round
+RACE_FLAGS_2025 = {
+    1:  "🇦🇺",  # Australia
+    2:  "🇨🇳",  # China
+    3:  "🇯🇵",  # Japan
+    4:  "🇧🇭",  # Bahrain
+    5:  "🇸🇦",  # Saudi Arabia
+    6:  "🇺🇸",  # Miami (USA)
+    7:  "🇮🇹",  # Emilia Romagna (Italy)
+    8:  "🇲🇨",  # Monaco
+    9:  "🇪🇸",  # Spain
+    10: "🇨🇦",  # Canada
+    11: "🇦🇹",  # Austria
+    12: "🇬🇧",  # Britain
+    13: "🇧🇪",  # Belgium
+    14: "🇭🇺",  # Hungary
+    15: "🇳🇱",  # Netherlands
+    16: "🇮🇹",  # Italy (Monza)
+    17: "🇦🇿",  # Azerbaijan
+    18: "🇸🇬",  # Singapore
+    19: "🇺🇸",  # United States (COTA)
+    20: "🇲🇽",  # Mexico
+    21: "🇧🇷",  # Brazil
+    22: "🇺🇸",  # Las Vegas (USA)
+    23: "🇶🇦",  # Qatar
+    24: "🇦🇪",  # Abu Dhabi
+}
+FLAGS_BY_YEAR = {2024: RACE_FLAGS_2024, 2025: RACE_FLAGS_2025}
 
 # 2024 race calendar (round → name).
 RACE_CALENDAR_2024 = {
@@ -140,7 +165,34 @@ RACE_CALENDAR_2024 = {
     23: "Qatar GP",
     24: "Abu Dhabi GP",
 }
-CALENDAR_BY_YEAR = {2024: RACE_CALENDAR_2024}
+# 2025 race calendar (round → name).
+RACE_CALENDAR_2025 = {
+    1:  "Australian GP",
+    2:  "Chinese GP",
+    3:  "Japanese GP",
+    4:  "Bahrain GP",
+    5:  "Saudi Arabian GP",
+    6:  "Miami GP",
+    7:  "Emilia Romagna GP",
+    8:  "Monaco GP",
+    9:  "Spanish GP",
+    10: "Canadian GP",
+    11: "Austrian GP",
+    12: "British GP",
+    13: "Belgian GP",
+    14: "Hungarian GP",
+    15: "Dutch GP",
+    16: "Italian GP",
+    17: "Azerbaijan GP",
+    18: "Singapore GP",
+    19: "United States GP",
+    20: "Mexico City GP",
+    21: "São Paulo GP",
+    22: "Las Vegas GP",
+    23: "Qatar GP",
+    24: "Abu Dhabi GP",
+}
+CALENDAR_BY_YEAR = {2024: RACE_CALENDAR_2024, 2025: RACE_CALENDAR_2025}
 
 # Official F1 CDN circuit map image filenames (from media.formula1.com).
 _F1_CDN_BASE = (
@@ -174,7 +226,33 @@ F1_CDN_FILENAMES_2024 = {
     23: "Qatar_Circuit",
     24: "Abu_Dhabi_Circuit",
 }
-F1_CDN_FILENAMES_BY_YEAR = {2024: F1_CDN_FILENAMES_2024}
+F1_CDN_FILENAMES_2025 = {
+    1:  "Australia_Circuit",
+    2:  "China_Circuit",
+    3:  "Japan_Circuit",
+    4:  "Bahrain_Circuit",
+    5:  "Saudi_Arabia_Circuit",
+    6:  "Miami_Circuit",
+    7:  "Emilia_Romagna_Circuit",
+    8:  "Monaco_Circuit",
+    9:  "Spain_Circuit",
+    10: "Canada_Circuit",
+    11: "Austria_Circuit",
+    12: "Great_Britain_Circuit",
+    13: "Belgium_Circuit",
+    14: "Hungary_Circuit",
+    15: "Netherlands_Circuit",
+    16: "Italy_Circuit",
+    17: "Baku_Circuit",
+    18: "Singapore_Circuit",
+    19: "USA_Circuit",
+    20: "Mexico_Circuit",
+    21: "Brazil_Circuit",
+    22: "Las_Vegas_Circuit",
+    23: "Qatar_Circuit",
+    24: "Abu_Dhabi_Circuit",
+}
+F1_CDN_FILENAMES_BY_YEAR = {2024: F1_CDN_FILENAMES_2024, 2025: F1_CDN_FILENAMES_2025}
 
 # ---------------------------------------------------------------------------
 # Cached loaders
@@ -248,13 +326,6 @@ def run_prediction(year: int, round_number: int, use_actual_grid: bool, mc_sampl
     setup_cache("cache")
     from src.pipeline import predict_race
     return predict_race(year, round_number, use_actual_grid=use_actual_grid, mc_samples=mc_samples)
-
-
-def run_whatif_prediction(year: int, round_number: int, overrides: dict, use_actual_grid: bool):
-    """What-if predictions are NOT cached (need fresh result per override combo)."""
-    setup_cache("cache")
-    from src.pipeline import predict_race
-    return predict_race(year, round_number, overrides=overrides, use_actual_grid=use_actual_grid)
 
 
 # ---------------------------------------------------------------------------
@@ -618,14 +689,14 @@ def grid_bar_chart(df: pd.DataFrame, pos_col: str, title: str):
 # Sidebar
 # ---------------------------------------------------------------------------
 
-_SECTIONS = ["📊 Qualifying", "🏁 Race Prediction", "🎯 Accuracy", "🔬 Practice Data", "🔧 What-If"]
+_SECTIONS = ["📊 Qualifying", "🏁 Race Prediction", "🎯 Accuracy", "🔬 Practice Data"]
 
 with st.sidebar:
     st.title("🏎️ F1 Race Predictor")
     st.markdown("Two-stage ML pipeline: **Practice → Quali → Race**")
     st.divider()
 
-    year = st.selectbox("Season", [2024], index=0)
+    year = st.selectbox("Season", [2024, 2025], index=1)
     calendar = CALENDAR_BY_YEAR.get(year, {})
     race_options = list(calendar.items())  # [(round, name), ...]
     race_labels = [f"R{r} — {name}" for r, name in race_options]
@@ -680,6 +751,8 @@ with _map_col:
         st.image(_img_path, use_container_width=True)
     else:
         st.caption("Track image unavailable")
+
+st.divider()
 
 if not models_loaded:
     st.info("Train the models first using the instructions in the sidebar, then come back here.")
@@ -886,83 +959,3 @@ elif _active_section == "🔬 Practice Data":
             st.markdown(practice_timing_html(sess_df, quali_team_map), unsafe_allow_html=True)
             st.divider()
 
-# ===========================================================================
-# Section 5 – What-If
-# ===========================================================================
-elif _active_section == "🔧 What-If":
-    st.subheader("What-If Scenario Controls")
-    st.markdown("Override inputs to the race model and see how predictions change.")
-
-    drivers = result["qualifying"]["driver"].tolist()
-
-    with st.form("whatif_form"):
-        col_g, col_p = st.columns(2)
-
-        with col_g:
-            st.markdown("**Grid Position Overrides**")
-            grid_overrides = {}
-            driver_a = st.selectbox("Driver A", drivers, key="da")
-            new_pos_a = st.number_input(f"{driver_a} new grid pos", min_value=1, max_value=20,
-                                         value=int(result["qualifying"].set_index("driver").loc[driver_a, "predicted_grid_pos"])
-                                         if driver_a in result["qualifying"]["driver"].values else 1,
-                                         key="pa")
-            driver_b = st.selectbox("Driver B", drivers, index=1, key="db")
-            new_pos_b = st.number_input(f"{driver_b} new grid pos", min_value=1, max_value=20,
-                                         value=int(result["qualifying"].set_index("driver").loc[driver_b, "predicted_grid_pos"])
-                                         if driver_b in result["qualifying"]["driver"].values else 2,
-                                         key="pb")
-
-        with col_p:
-            st.markdown("**Pit Stop Overrides**")
-            pit_overrides = {}
-            driver_pit = st.selectbox("Driver", drivers, key="dp")
-            new_pits = st.slider(f"{driver_pit} pit stops", min_value=1, max_value=4, value=2)
-
-        submitted = st.form_submit_button("Apply What-If", type="primary")
-
-    if submitted:
-        overrides = {
-            "grid_position": {driver_a: new_pos_a, driver_b: new_pos_b},
-            "pit_stops": {driver_pit: new_pits},
-        }
-        with st.spinner("Re-running race model with overrides..."):
-            try:
-                wi_result = run_whatif_prediction(year, round_number, overrides, use_actual_grid)
-                wi_race = wi_result["race"]
-
-                st.markdown("#### What-If Finishing Order")
-                baseline_race = result["race"].set_index("driver")["predicted_finish_pos"]
-                wi_compare = wi_race[["predicted_finish_pos", "driver"]].copy()
-                wi_compare.columns = ["New Pos", "Driver"]
-                wi_compare["Baseline Pos"] = wi_compare["Driver"].map(baseline_race)
-                wi_compare["Change"] = (wi_compare["Baseline Pos"] - wi_compare["New Pos"]).apply(
-                    lambda v: f"+{int(v)}" if v > 0 else str(int(v))
-                )
-                st.dataframe(wi_compare[["New Pos", "Driver", "Baseline Pos", "Change"]],
-                             use_container_width=True, hide_index=True)
-
-                # Side-by-side bar comparison
-                combined = pd.merge(
-                    result["race"][["driver", "predicted_finish_pos"]].rename(
-                        columns={"predicted_finish_pos": "Baseline"}),
-                    wi_race[["driver", "predicted_finish_pos"]].rename(
-                        columns={"predicted_finish_pos": "What-If"}),
-                    on="driver",
-                )
-                fig_wi = go.Figure()
-                fig_wi.add_trace(go.Bar(name="Baseline", x=combined["driver"],
-                                        y=combined["Baseline"], marker_color="#888"))
-                fig_wi.add_trace(go.Bar(name="What-If", x=combined["driver"],
-                                        y=combined["What-If"], marker_color="#E8002D"))
-                fig_wi.update_layout(
-                    barmode="group", title="Baseline vs What-If Finishing Positions",
-                    yaxis=dict(autorange="reversed", title="Position"),
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    font_color="white", height=380,
-                )
-                st.plotly_chart(fig_wi, use_container_width=True)
-
-            except Exception as exc:
-                st.error(f"What-if prediction failed: {exc}")
-    else:
-        st.info("Set overrides above and click **Apply What-If** to see results.")
