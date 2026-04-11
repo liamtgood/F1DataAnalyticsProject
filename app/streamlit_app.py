@@ -407,8 +407,7 @@ def load_season_accuracy(year: int, calendar: dict) -> pd.DataFrame:
     qualifying + race MAE. Returns a DataFrame with one row per round.
     """
     setup_cache("cache")
-    from src.pipeline import predict_race
-    from src.data_loader import load_race_results, load_qualifying_results
+    from src.data_loader import load_race_results
     rows = []
     for rnd, name in calendar.items():
         try:
@@ -416,7 +415,7 @@ def load_season_accuracy(year: int, calendar: dict) -> pd.DataFrame:
             rr = load_race_results(year, rnd)
             if rr.empty:
                 continue
-            result = predict_race(year, rnd, use_actual_grid=False)
+            result = run_prediction(year, rnd, use_actual_grid=False)
             q_df = result["qualifying"]
             r_df = result["race"]
             row = {"round": rnd, "race": name}
@@ -443,7 +442,36 @@ def load_season_accuracy(year: int, calendar: dict) -> pd.DataFrame:
 
 @st.cache_data(show_spinner="Running predictions...", ttl=3600)
 def run_prediction(year: int, round_number: int, use_actual_grid: bool, mc_samples: int = 1):
-    """Cache predictions per (year, round, mc_samples) so switching tabs doesn't re-run."""
+    """Load from pre-computed JSON if available, otherwise run live pipeline."""
+    import json
+
+    pred_file = Path(f"data/predictions/{year}_{round_number:02d}.json")
+
+    if pred_file.exists() and not use_actual_grid:
+        with open(pred_file) as f:
+            payload = json.load(f)
+
+        def _to_df(records):
+            return pd.DataFrame(records) if records else pd.DataFrame()
+
+        def _probs_from_dict(d):
+            if not d:
+                return None
+            return pd.DataFrame(
+                {driver: {int(k): v for k, v in pos_probs.items()}
+                 for driver, pos_probs in d.items()}
+            ).T
+
+        return {
+            "qualifying": _to_df(payload["qualifying"]),
+            "race": _to_df(payload["race"]),
+            "race_probs": _probs_from_dict(payload.get("race_probs")),
+            "quali_probs": _probs_from_dict(payload.get("quali_probs")),
+            "quali_raw": _to_df(payload.get("quali_raw", [])),
+            "race_raw": _to_df(payload.get("race_raw", [])),
+        }
+
+    # Fall back to live pipeline (no pre-computed file, or use_actual_grid requested)
     setup_cache("cache")
     from src.pipeline import predict_race
     return predict_race(year, round_number, use_actual_grid=use_actual_grid, mc_samples=mc_samples)
