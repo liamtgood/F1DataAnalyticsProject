@@ -860,13 +860,20 @@ with st.sidebar:
 
     year = st.selectbox("Season", [2024, 2025, 2026], index=2)
     calendar = CALENDAR_BY_YEAR.get(year, {})
-    race_options = list(calendar.items())  # [(round, name), ...]
+    # Only show rounds that have pre-computed prediction data
+    race_options = [
+        (r, name) for r, name in calendar.items()
+        if Path(f"data/predictions/{year}_{r:02d}.json").exists()
+    ]
+    if not race_options:
+        st.warning("No prediction data available for this season yet.")
+        st.stop()
     race_labels = [f"R{r} — {name}" for r, name in race_options]
     selected_idx = st.selectbox(
         "Race Weekend",
         options=range(len(race_options)),
         format_func=lambda i: race_labels[i],
-        index=0,
+        index=len(race_options) - 1,  # default to most recent
     )
     round_number, race_name = race_options[selected_idx]
 
