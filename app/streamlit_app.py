@@ -400,46 +400,6 @@ def load_models():
     return models
 
 
-@st.cache_data(show_spinner="Computing season accuracy...", ttl=3600)
-def load_season_accuracy(year: int, calendar: dict) -> pd.DataFrame:
-    """
-    For each completed round in the season, run predictions and compute
-    qualifying + race MAE. Returns a DataFrame with one row per round.
-    """
-    setup_cache("cache")
-    from src.data_loader import load_race_results
-    rows = []
-    for rnd, name in calendar.items():
-        try:
-            # Check if actual results exist (race has happened)
-            rr = load_race_results(year, rnd)
-            if rr.empty:
-                continue
-            result = run_prediction(year, rnd, use_actual_grid=False)
-            q_df = result["qualifying"]
-            r_df = result["race"]
-            row = {"round": rnd, "race": name}
-            if "actual_grid_pos" in q_df.columns:
-                mask = q_df["actual_grid_pos"].notna()
-                if mask.sum() >= 2:
-                    row["quali_mae"] = float(
-                        (q_df.loc[mask, "predicted_grid_pos"] - q_df.loc[mask, "actual_grid_pos"]).abs().mean()
-                    )
-            if "actual_finish_pos" in r_df.columns:
-                mask = r_df["actual_finish_pos"].notna()
-                if "dnf" in r_df.columns:
-                    mask = mask & (r_df["dnf"].fillna(0).astype(int) == 0)
-                if mask.sum() >= 2:
-                    row["race_mae"] = float(
-                        (r_df.loc[mask, "predicted_finish_pos"] - r_df.loc[mask, "actual_finish_pos"]).abs().mean()
-                    )
-            if len(row) > 2:
-                rows.append(row)
-        except Exception:
-            continue
-    return pd.DataFrame(rows)
-
-
 @st.cache_data(show_spinner="Running predictions...", ttl=3600)
 def run_prediction(year: int, round_number: int, use_actual_grid: bool, mc_samples: int = 1):
     """Load from pre-computed JSON if available, otherwise run live pipeline."""
@@ -1116,40 +1076,6 @@ elif _active_section == "🎯 Accuracy":
             err_df = err_df.reset_index()
             err_df.columns = [c.replace("_", " ").title() for c in err_df.columns]
             st.dataframe(err_df, use_container_width=True, hide_index=True)
-
-        # Rolling accuracy across the season
-        st.markdown("#### Season Rolling Accuracy")
-        st.caption("MAE per race across all completed rounds this season. Lower is better.")
-        with st.spinner("Loading season accuracy..."):
-            season_acc = load_season_accuracy(year, CALENDAR_BY_YEAR.get(year, {}))
-        if season_acc.empty:
-            st.info("Not enough completed races to show rolling accuracy yet.")
-        else:
-            fig_roll = go.Figure()
-            if "quali_mae" in season_acc.columns:
-                fig_roll.add_trace(go.Scatter(
-                    x=season_acc["race"], y=season_acc["quali_mae"],
-                    mode="lines+markers", name="Qualifying MAE",
-                    line=dict(color="#00D2BE", width=2),
-                    marker=dict(size=7),
-                ))
-            if "race_mae" in season_acc.columns:
-                fig_roll.add_trace(go.Scatter(
-                    x=season_acc["race"], y=season_acc["race_mae"],
-                    mode="lines+markers", name="Race MAE",
-                    line=dict(color="#E8002D", width=2),
-                    marker=dict(size=7),
-                ))
-            fig_roll.update_layout(
-                height=380,
-                yaxis=dict(title="Mean Absolute Error (positions)", rangemode="tozero"),
-                xaxis=dict(tickangle=-35),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font_color="white",
-                legend=dict(orientation="h", y=1.05),
-                margin=dict(l=20, r=20, t=30, b=80),
-            )
-            st.plotly_chart(fig_roll, use_container_width=True)
 
 # ===========================================================================
 # Section 4 – Practice Data
