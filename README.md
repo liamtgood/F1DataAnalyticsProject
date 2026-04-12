@@ -23,7 +23,7 @@ Predictions are pre-computed after each race weekend and stored as JSON files so
 ### Setup
 
 ```bash
-git clone https://github.com/your-username/F1DataAnalyticsProject.git
+git clone https://github.com/liamtgood/F1DataAnalyticsProject.git
 cd F1DataAnalyticsProject
 
 pip install -r requirements.txt
