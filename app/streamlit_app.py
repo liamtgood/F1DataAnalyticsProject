@@ -594,7 +594,7 @@ def practice_timing_html(sess_df: pd.DataFrame, team_map: dict) -> str:
     return _tt_table(thead, tbody)
 
 
-def qualifying_timing_html(df: pd.DataFrame, lap_col, lap_col_label: str = "Lap Time") -> str:
+def qualifying_timing_html(df: pd.DataFrame, lap_col, lap_col_label: str = "Lap Time", gap_col_label: str = "Gap to Pole") -> str:
     df = df.sort_values("predicted_grid_pos").reset_index(drop=True)
     has_lap = bool(lap_col and lap_col in df.columns)
     has_gap = "proj_pole_gap_s" in df.columns
@@ -603,7 +603,7 @@ def qualifying_timing_html(df: pd.DataFrame, lap_col, lap_col_label: str = "Lap 
     if has_lap:
         thead += _th(lap_col_label)
     if has_gap:
-        thead += _th("Gap to Pole")
+        thead += _th(gap_col_label)
     if has_actual:
         thead += _th("Actual P", "center")
     tbody = ""
@@ -976,7 +976,8 @@ if _active_section == "📊 Qualifying":
         st.markdown(f"**{label_prefix}:** `{proj_pole_label}`")
 
     _lap_col_label = "Proj. Lap Time" if lap_col == "fp_theoretical_best_s" else "Lap Time"
-    st.markdown(qualifying_timing_html(qual_df, lap_col, _lap_col_label), unsafe_allow_html=True)
+    _gap_col_label = "Proj. Gap to Pole" if lap_col == "fp_theoretical_best_s" else "Gap to Pole"
+    st.markdown(qualifying_timing_html(qual_df, lap_col, _lap_col_label, _gap_col_label), unsafe_allow_html=True)
 
     # SHAP
     st.subheader("Feature Importance (Qualifying Model)")
