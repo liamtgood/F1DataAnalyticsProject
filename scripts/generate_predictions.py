@@ -79,7 +79,7 @@ def _probs_to_dict(probs_df) -> dict:
 
 def generate(year: int, rnd: int, out_dir: Path, mc_samples: int) -> Path:
     logger.info("Generating predictions for %d R%02d ...", year, rnd)
-    result = predict_race(year, rnd, use_actual_grid=False, mc_samples=mc_samples)
+    result_predicted = predict_race(year, rnd, use_actual_grid=False, mc_samples=mc_samples)
 
     payload = {
         "meta": {
@@ -88,13 +88,30 @@ def generate(year: int, rnd: int, out_dir: Path, mc_samples: int) -> Path:
             "mc_samples": mc_samples,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         },
-        "qualifying": _df_to_json(result["qualifying"]),
-        "race": _df_to_json(result["race"]),
-        "race_probs": _probs_to_dict(result.get("race_probs")),
-        "quali_probs": _probs_to_dict(result.get("quali_probs")),
-        "quali_raw": _df_to_json(result["quali_raw"]),
-        "race_raw": _df_to_json(result["race_raw"]),
+        # Predicted qualifying + race (Stage 1 → Stage 2)
+        "qualifying": _df_to_json(result_predicted["qualifying"]),
+        "race": _df_to_json(result_predicted["race"]),
+        "race_probs": _probs_to_dict(result_predicted.get("race_probs")),
+        "quali_probs": _probs_to_dict(result_predicted.get("quali_probs")),
+        "quali_raw": _df_to_json(result_predicted["quali_raw"]),
+        "race_raw": _df_to_json(result_predicted["race_raw"]),
+        # Actual qualifying grid → race (Stage 2 only)
+        "actual_grid": {},
     }
+
+    # Try to also generate the actual-grid version (only works for completed races)
+    try:
+        result_actual = predict_race(year, rnd, use_actual_grid=True, mc_samples=mc_samples)
+        payload["actual_grid"] = {
+            "qualifying": _df_to_json(result_actual["qualifying"]),
+            "race": _df_to_json(result_actual["race"]),
+            "race_probs": _probs_to_dict(result_actual.get("race_probs")),
+            "quali_raw": _df_to_json(result_actual["quali_raw"]),
+            "race_raw": _df_to_json(result_actual["race_raw"]),
+        }
+        logger.info("  Also saved actual-grid variant.")
+    except Exception as exc:
+        logger.warning("  Actual-grid variant unavailable: %s", exc)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{year}_{rnd:02d}.json"

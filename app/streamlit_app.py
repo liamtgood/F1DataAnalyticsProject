@@ -447,7 +447,7 @@ def run_prediction(year: int, round_number: int, use_actual_grid: bool, mc_sampl
 
     pred_file = Path(f"data/predictions/{year}_{round_number:02d}.json")
 
-    if pred_file.exists() and not use_actual_grid:
+    if pred_file.exists():
         with open(pred_file) as f:
             payload = json.load(f)
 
@@ -462,16 +462,29 @@ def run_prediction(year: int, round_number: int, use_actual_grid: bool, mc_sampl
                  for driver, pos_probs in d.items()}
             ).T
 
-        return {
-            "qualifying": _to_df(payload["qualifying"]),
-            "race": _to_df(payload["race"]),
-            "race_probs": _probs_from_dict(payload.get("race_probs")),
-            "quali_probs": _probs_from_dict(payload.get("quali_probs")),
-            "quali_raw": _to_df(payload.get("quali_raw", [])),
-            "race_raw": _to_df(payload.get("race_raw", [])),
-        }
+        # Use actual-grid variant if requested and available
+        if use_actual_grid and payload.get("actual_grid"):
+            ag = payload["actual_grid"]
+            return {
+                "qualifying": _to_df(ag.get("qualifying", [])),
+                "race": _to_df(ag.get("race", [])),
+                "race_probs": _probs_from_dict(ag.get("race_probs")),
+                "quali_probs": None,
+                "quali_raw": _to_df(ag.get("quali_raw", [])),
+                "race_raw": _to_df(ag.get("race_raw", [])),
+            }
 
-    # Fall back to live pipeline (no pre-computed file, or use_actual_grid requested)
+        if not use_actual_grid:
+            return {
+                "qualifying": _to_df(payload["qualifying"]),
+                "race": _to_df(payload["race"]),
+                "race_probs": _probs_from_dict(payload.get("race_probs")),
+                "quali_probs": _probs_from_dict(payload.get("quali_probs")),
+                "quali_raw": _to_df(payload.get("quali_raw", [])),
+                "race_raw": _to_df(payload.get("race_raw", [])),
+            }
+
+    # Fall back to live pipeline (no pre-computed file, or actual_grid not in JSON yet)
     setup_cache("cache")
     from src.pipeline import predict_race
     return predict_race(year, round_number, use_actual_grid=use_actual_grid, mc_samples=mc_samples)
