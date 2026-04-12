@@ -39,7 +39,7 @@ If you want to retrain on updated data:
 
 ```bash
 # 1. Rebuild the training datasets (downloads from FastF1)
-python scripts/build_dataset.py --years 2024 2025 2026
+python scripts/build_dataset.py --years {year ex. 2023}
 
 # 2. Train qualifying model
 python -m src.qualifying_model train
